@@ -12,7 +12,7 @@ let currentFilteredTxns = null;
 // The frontend (static site) and backend (web service) are deployed to
 // separate Render URLs, so in production we must call the backend's full URL.
 // 👉 After deploying the backend, paste its Render URL here (no trailing slash).
-const PROD_BACKEND = "https://YOUR-BACKEND.onrender.com";
+const PROD_BACKEND = "https://bhandol-backend.onrender.com";
 const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname);
 // Local dev still works if you run the backend on localhost (it serves /api).
 const API_URL = isLocalHost ? "/api" : `${PROD_BACKEND}/api`;
