@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bhandol Hardware | User Management</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- WELCOME MODAL -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-modal">&times;</span>
+      <h2 id="modal-title"></h2>
+      <p id="modal-subtitle"></p>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div id="logout-modal" class="modal">
+    <div class="modal-content">
+      <h2>Confirm Logout</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+        <button id="logout-no" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE USER MODAL -->
+  <div id="create-user-modal" class="modal">
+    <div class="modal-content">
+      <h2><i data-lucide="user-plus" class="lucide-icon"></i> Create New User</h2>
+      <form id="create-user-form">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="cu-name" placeholder="E.g. Doe, John" required>
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="cu-username" placeholder="Login username" required>
+          <span class="error-msg" id="cu-username-err"></span>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="cu-password" placeholder="Login password" required>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="cu-role">
+            <option value="staff">Staff</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+        <div class="modal-buttons" style="margin-top: 20px;">
+          <button type="submit" class="primary-btn">Create User</button>
+          <button type="button" class="secondary-btn" id="cu-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- VIEW CREDENTIALS MODAL -->
+  <div id="view-creds-modal" class="modal">
+    <div class="modal-content" style="max-width: 400px; text-align: center;">
+      <h2><i data-lucide="key-round" class="lucide-icon"></i> User Credentials</h2>
+      <p>Credentials for <strong id="vc-name"></strong>:</p>
+
+      <div
+        style="background: var(--surface-alt); border: 1px solid var(--surface-border); border-radius: var(--radius-sm); padding: 16px; margin: 20px 0; text-align: left;">
+        <div style="margin-bottom: 12px;">
+          <span
+            style="font-size: 11px; font-weight: 600; color: var(--slate-400); text-transform: uppercase;">Username</span><br>
+          <code style="font-size: 14px; color: var(--navy-800);" id="vc-username"></code>
+        </div>
+        <div>
+          <span
+            style="font-size: 11px; font-weight: 600; color: var(--slate-400); text-transform: uppercase;">Password</span><br>
+          <code style="font-size: 14px; color: var(--navy-800);" id="vc-password"></code>
+        </div>
+      </div>
+
+      <button class="primary-btn" id="vc-close" style="width: 100%;">Close</button>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
+  <div id="confirm-action-modal" class="modal">
+    <div class="modal-content">
+      <div class="confirm-icon"><i data-lucide="alert-triangle" class="lucide-icon"
+          style="width:32px;height:32px;color:var(--amber-500);"></i></div>
+      <h2 id="confirm-action-title">Confirm Action</h2>
+      <p id="confirm-action-msg">Are you sure?</p>
+      <div class="modal-buttons">
+        <button id="confirm-action-yes" class="danger-btn" style="width:45%;margin:0;">Yes, Proceed</button>
+        <button id="confirm-action-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+          <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+        </div>
+      </div>
+
+      <nav>
+        <a href="dashboard.html">
+          <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+        </a>
+        <a href="inventory.html">
+          <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+        </a>
+        <div class="nav-divider"></div>
+        <a href="stock-in.html">
+          <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+        </a>
+        <a href="stock-out.html">
+          <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+        </a>
+        <div class="nav-divider"></div>
+        <a href="transactions.html">
+          <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+        </a>
+        <a href="users.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+        </a>
+      </nav>
+
+      <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+        <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon" style="width:14px;height:14px;"></i>
+          Dark Mode</span>
+        <div class="theme-switch"></div>
+      </div>
+
+      <div class="user-box">
+        <div class="user-info-row">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-details">
+            <p class="username" id="displayName"></p>
+            <p class="role" id="displayRole"></p>
+          </div>
+        </div>
+        <button onclick="confirmLogout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <h1>User Management</h1>
+      <p class="page-desc">Manage user accounts and access permissions</p>
+
+      <!-- ADMIN RECOVERY INSTRUCTIONS -->
+      <div class="alert-recovery-banner">
+        <i data-lucide="terminal" class="lucide-icon"
+          style="flex-shrink: 0; margin-top: 2px;"></i>
+        <div>
+          <h4>Emergency Administrator Recovery</h4>
+          <p>If you lose your login credentials,
+            run the local recovery tool on the host server inside the <code>/server</code> directory:</p>
+          <div class="recovery-code-block">
+            node reset-admin.js &lt;username&gt; "new_password"
+          </div>
+        </div>
+      </div>
+
+      <!-- USER SUMMARY -->
+      <div class="stats-grid">
+        <div class="stat-card success">
+          <div class="stat-icon"><i data-lucide="user-check" class="lucide-icon"></i></div>
+          <h3>Active Users</h3>
+          <p class="stat-number">—</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon"><i data-lucide="users" class="lucide-icon"></i></div>
+          <h3>Total Users</h3>
+          <p class="stat-number">—</p>
+        </div>
+      </div>
+
+      <!-- ACTION BAR -->
+      <div class="filter-bar">
+        <div class="search-wrapper">
+          <input type="text" id="user-search" placeholder="Search user ID or name...">
+        </div>
+        <button class="primary-btn" style="width:auto;" onclick="openCreateUserModal()"><i data-lucide="user-plus"
+            class="lucide-icon"></i> Create User</button>
+      </div>
+
+      <!-- USERS TABLE -->
+      <div class="card">
+        <h2><i data-lucide="users" class="lucide-icon"></i> User Accounts</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-body">
+            <tr>
+              <td colspan="6" style="text-align:center;color:var(--slate-400);">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

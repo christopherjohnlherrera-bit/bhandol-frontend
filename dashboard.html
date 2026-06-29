@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bhandol Hardware | Dashboard</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- WELCOME MODAL -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-modal">&times;</span>
+      <h2 id="modal-title"></h2>
+      <p id="modal-subtitle"></p>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div id="logout-modal" class="modal">
+    <div class="modal-content">
+      <h2>Confirm Logout</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+        <button id="logout-no" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
+  <div id="confirm-action-modal" class="modal">
+    <div class="modal-content">
+      <div class="confirm-icon"><i data-lucide="alert-triangle" class="lucide-icon"
+          style="width:32px;height:32px;color:var(--amber-500);"></i></div>
+      <h2 id="confirm-action-title">Confirm Action</h2>
+      <p id="confirm-action-msg">Are you sure?</p>
+      <div class="modal-buttons">
+        <button id="confirm-action-yes" class="danger-btn" style="width:45%;margin:0;">Yes, Proceed</button>
+        <button id="confirm-action-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+          <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+        </div>
+      </div>
+
+      <nav>
+        <a href="dashboard.html">
+          <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+        </a>
+        <a href="inventory.html">
+          <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+        </a>
+        <div class="nav-divider"></div>
+        <a href="stock-in.html">
+          <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+        </a>
+        <a href="stock-out.html">
+          <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+        </a>
+        <div class="nav-divider"></div>
+        <a href="transactions.html">
+          <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+        </a>
+        <a href="users.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+        </a>
+      </nav>
+
+      <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+        <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon" style="width:14px;height:14px;"></i>
+          Dark Mode</span>
+        <div class="theme-switch"></div>
+      </div>
+
+      <div class="user-box">
+        <div class="user-info-row">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-details">
+            <p class="username" id="displayName"></p>
+            <p class="role" id="displayRole"></p>
+          </div>
+        </div>
+        <button onclick="confirmLogout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h1>Dashboard Overview</h1>
+          <p class="page-desc">Welcome back — here's what's happening with your inventory today.</p>
+        </div>
+        <button class="primary-btn admin-only" id="btn-export-pdf" style="white-space: nowrap; height: fit-content;"
+          title="Export Dashboard as PDF Report">
+          <i data-lucide="file-text" class="lucide-icon"></i> Export PDF Report
+        </button>
+      </div>
+
+      <!-- STATS -->
+      <div class="stats-grid">
+        <div class="stat-card clickable" id="card-total-products" onclick="openStatModal('Total Products')"
+          title="Click to view full report">
+          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
+            onclick="event.stopPropagation(); openWidgetFullscreen('card-total-products')"><i data-lucide="maximize"
+              class="lucide-icon" style="width:14px;height:14px;color:inherit;"></i></button>
+          <div class="stat-icon"><i data-lucide="package" class="lucide-icon"></i></div>
+          <h3>Total Products</h3>
+          <p class="stat-number" id="total-products">—</p>
+        </div>
+        <div class="stat-card clickable" id="card-total-stock-qty" style="border-left: none;"
+          onclick="openStatModal('Total Stock Quantity')" title="Click to view full report">
+          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
+            onclick="event.stopPropagation(); openWidgetFullscreen('card-total-stock-qty')"><i data-lucide="maximize"
+              class="lucide-icon" style="width:14px;height:14px;color:inherit;"></i></button>
+          <div class="stat-icon" style="background: var(--surface-alt); color: var(--blue-600);"><i
+              data-lucide="bar-chart-3" class="lucide-icon"></i></div>
+          <h3>Total Stock Quantity</h3>
+          <p class="stat-number" id="total-stock-qty">—</p>
+        </div>
+        <div class="stat-card warning clickable" id="card-low-stock" onclick="openStatModal('Low Stock Items')"
+          title="Click to view full report">
+          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
+            onclick="event.stopPropagation(); openWidgetFullscreen('card-low-stock')"><i data-lucide="maximize"
+              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
+          <div class="stat-icon"><i data-lucide="alert-triangle" class="lucide-icon"></i></div>
+          <h3>Low Stock Items</h3>
+          <p class="stat-number" id="low-stock-count">—</p>
+        </div>
+        <div class="stat-card success clickable" id="card-stock-in" onclick="openStatModal('Stock In (This Month)')"
+          title="Click to view full report">
+          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
+            onclick="event.stopPropagation(); openWidgetFullscreen('card-stock-in')"><i data-lucide="maximize"
+              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
+          <div class="stat-icon"><i data-lucide="arrow-down-to-line" class="lucide-icon"></i></div>
+          <h3>Stock In (This Month)</h3>
+          <p class="stat-number" id="stock-in-month">—</p>
+        </div>
+        <div class="stat-card danger clickable" id="card-stock-out" onclick="openStatModal('Stock Out (This Month)')"
+          title="Click to view full report">
+          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
+            onclick="event.stopPropagation(); openWidgetFullscreen('card-stock-out')"><i data-lucide="maximize"
+              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
+          <div class="stat-icon"><i data-lucide="arrow-up-from-line" class="lucide-icon"></i></div>
+          <h3>Stock Out (This Month)</h3>
+          <p class="stat-number" id="stock-out-month">—</p>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="chart-row">
+        <div class="chart-card" id="card-stock-movement">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0;"><i data-lucide="bar-chart-3" class="lucide-icon"></i> Stock Movement by Category</h3>
+            <button class="icon-btn maximize-btn" title="Expand Widget"
+              onclick="openWidgetFullscreen('card-stock-movement')"><i data-lucide="maximize" class="lucide-icon"
+                style="width:16px;height:16px;"></i></button>
+          </div>
+          <canvas id="stockMovementChart"></canvas>
+        </div>
+        <div class="chart-card" id="card-category-pie">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <h3 style="margin: 0;"><i data-lucide="pie-chart" class="lucide-icon"></i> Inventory by Category</h3>
+              <button class="icon-btn maximize-btn" title="Expand Widget"
+                onclick="openWidgetFullscreen('card-category-pie')"><i data-lucide="maximize" class="lucide-icon"
+                  style="width:16px;height:16px;"></i></button>
+            </div>
+            <label class="toggle-switch" title="Include items with zero quantity"
+              style="font-size: 13px; color: var(--slate-500); display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="toggle-out-of-stock"
+                style="accent-color: var(--blue-600); cursor: pointer; width: 16px; height: 16px;" checked>
+              Include Out of Stock
+            </label>
+          </div>
+          <canvas id="categoryPieChart"></canvas>
+        </div>
+      </div>
+
+      <!-- HEATMAP (Phase 9) -->
+      <div class="card" id="card-activity-pulse" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 style="margin: 0; font-size: 16px;"><i data-lucide="calendar-days" class="lucide-icon"></i> Store Activity
+            Pulse (Last 30 Days)</h2>
+          <button class="icon-btn maximize-btn" title="Expand Widget"
+            onclick="openWidgetFullscreen('card-activity-pulse')"><i data-lucide="maximize" class="lucide-icon"
+              style="width:16px;height:16px;"></i></button>
+        </div>
+        <div id="activity-heatmap" class="heatmap-container">
+          <!-- JS injected heatmap cells -->
+        </div>
+      </div>
+
+      <!-- RECENT TRANSACTIONS -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 style="margin: 0;"><i data-lucide="clipboard-list" class="lucide-icon"></i> Recent Transactions</h2>
+          <button class="danger-btn admin-only" id="btn-clear-recent-txns"
+            style="width: auto; margin: 0; padding: 8px 16px; font-size: 12px;"><i data-lucide="trash-2"
+              class="lucide-icon"></i> Clear Display</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Type</th>
+              <th>Quantity</th>
+              <th>User</th>
+            </tr>
+          </thead>
+          <tbody id="recent-txn-body">
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ACTIVITY TIMELINE + LOW STOCK THRESHOLD -->
+      <div class="chart-row" style="margin-bottom: 24px;">
+        <!-- ACTIVITY TIMELINE -->
+        <div class="card">
+          <h2><i data-lucide="clock" class="lucide-icon"></i> Activity Timeline</h2>
+          <div class="timeline" id="activity-timeline">
+            <div class="timeline-empty" style="text-align:center; color:var(--slate-400); padding: 20px 0;">
+              No recent activity.
+            </div>
+          </div>
+        </div>
+
+        <!-- LOW STOCK THRESHOLD SETTING -->
+        <div class="card admin-only">
+          <h2><i data-lucide="settings" class="lucide-icon"></i> Low Stock Threshold</h2>
+          <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
+            Set the quantity threshold below which items are flagged as "Low Stock" across the system.
+          </p>
+
+          <!-- Low Stock Protection toggle — injected by JS at runtime -->
+          <div id="low-stock-protection-container" style="margin-bottom: 16px;"></div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+              <label>Threshold Quantity</label>
+              <input type="number" id="low-stock-threshold" min="1" max="999" value="8" style="width: 100%;">
+            </div>
+            <button class="primary-btn" id="btn-save-threshold"
+              style="width: auto; margin-top: 22px; padding: 11px 24px;"><i data-lucide="save" class="lucide-icon"></i>
+              Save</button>
+          </div>
+          <p style="font-size: 12px; color: var(--slate-400); margin-top: 10px;">
+            Current threshold: <strong id="current-threshold-display">8</strong> units
+          </p>
+        </div>
+      </div>
+
+      <!-- SYSTEM TOOLS (Admin Only) -->
+      <div class="card admin-only" id="system-tools-card">
+        <h2><i data-lucide="settings" class="lucide-icon"></i> System Tools (Data Backup)</h2>
+        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
+          Download a full snapshot of your system data (users, products, and transactions), or restore the system from a
+          previous backup file.
+        </p>
+        <div style="display: flex; gap: 12px;">
+          <button class="primary-btn" id="btn-download-backup" style="width: auto;"><i data-lucide="download"
+              class="lucide-icon"></i> Download System Backup
+            (.json)</button>
+          <button class="secondary-btn" id="btn-restore-backup" style="width: auto;"><i data-lucide="upload"
+              class="lucide-icon"></i> Restore Backup</button>
+          <input type="file" id="restore-file-input" accept=".json" style="display: none;">
+        </div>
+      </div>
+
+      <!-- EXPORT ACTIVITY LOG (Admin Only) -->
+      <div class="card admin-only" id="export-log-card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 style="margin: 0;"><i data-lucide="file-text" class="lucide-icon"></i> Export Activity Log</h2>
+          <button class="danger-btn" id="btn-clear-export-log"
+            style="width: auto; margin: 0; padding: 4px 8px; font-size: 11px;"><i data-lucide="trash-2"
+              class="lucide-icon"></i> Clear Display</button>
+        </div>
+        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
+          Track who exported or printed data from the system.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>User</th>
+              <th>Export Type</th>
+            </tr>
+          </thead>
+          <tbody id="export-log-body">
+            <tr>
+              <td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="stat-detail-modal" class="modal">
+    <div class="modal-content wide-modal" id="sdm-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <h2 id="sdm-title" style="margin:0; display:flex; align-items:center; gap:8px;">Detail View</h2>
+        <div style="display:flex; gap:16px; align-items:center;">
+          <button class="icon-btn" onclick="toggleStatModalFullscreen()" title="Toggle Fullscreen"
+            style="color:var(--slate-500);"><i data-lucide="maximize" class="lucide-icon"
+              style="width:20px;height:20px;"></i></button>
+          <span onclick="closeStatModal()"
+            style="cursor:pointer; font-size:24px; color:var(--slate-500);">&times;</span>
+        </div>
+      </div>
+      <div id="sdm-table-container"
+        style="max-height: 60vh; overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--radius-sm);">
+        <table style="width:100%; text-align:left; border-collapse:collapse;">
+          <thead id="sdm-thead"
+            style="border-bottom: 1px solid var(--surface-border); background: var(--surface-alt); position: sticky; top: 0; z-index: 10;">
+          </thead>
+          <tbody id="sdm-tbody">
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-buttons" style="margin-top: 24px; justify-content:flex-end;">
+        <button onclick="closeStatModal()" class="secondary-btn" style="width: auto;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOM COLOR PICKER COMPONENT (For Doughnut Chart Legends) -->
+  <div id="custom-color-picker" class="modal" style="display: none; background: transparent; backdrop-filter: none;">
+    <div class="modal-content"
+      style="padding: 16px; width: auto; max-width: 280px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid var(--surface-border-strong); position: absolute;">
+      <h3 style="margin-bottom: 12px; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+        <i data-lucide="palette" class="lucide-icon" style="width:16px; height:16px;"></i> Override Color
+      </h3>
+      <p style="font-size: 12px; color: var(--slate-400); margin-bottom: 12px;" id="ccp-category-name">Category</p>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+        <input type="color" id="ccp-input"
+          style="width: 40px; height: 32px; padding: 0; border: none; border-radius: 4px; cursor: pointer; background: none;">
+        <div
+          style="flex: 1; font-family: monospace; font-size: 13px; color: var(--slate-300); background: var(--surface); border: 1px solid var(--surface-border); padding: 6px 10px; border-radius: 4px;"
+          id="ccp-hex-display">#000000</div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button class="primary-btn" id="ccp-save" style="flex: 1; padding: 8px; font-size: 13px;">Apply</button>
+        <button class="secondary-btn" id="ccp-cancel" style="flex: 1; padding: 8px; font-size: 13px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WIDGET FULLSCREEN MODAL (Phase 10) -->
+  <div id="widget-fullscreen-modal" class="modal">
+    <div class="modal-content wf-content"
+      style="width:90%; max-width:1200px; height:85vh; display:flex; flex-direction:column; padding:0; background:var(--surface-alt); overflow:hidden;">
+      <div class="wf-header"
+        style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid var(--surface-border); background:var(--surface-alt);">
+        <h2 id="wf-title"
+          style="margin:0; font-size:18px; color:var(--navy-900); display:flex; align-items:center; gap:12px;"></h2>
+        <button class="icon-btn" onclick="closeWidgetFullscreen()" style="color:var(--slate-500);"><i data-lucide="x"
+            class="lucide-icon" style="width:24px;height:24px;"></i></button>
+      </div>
+      <div class="wf-body" id="wf-body"
+        style="flex:1; padding:24px; overflow:auto; display:flex; justify-content:center; align-items:center;">
+        <!-- JS Cloned Widget Content Goes Here -->
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="assets/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

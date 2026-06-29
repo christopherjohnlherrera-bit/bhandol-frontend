@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bhandol Hardware | Inventory</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- WELCOME MODAL -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-modal">&times;</span>
+      <h2 id="modal-title"></h2>
+      <p id="modal-subtitle"></p>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div id="logout-modal" class="modal">
+    <div class="modal-content">
+      <h2>Confirm Logout</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+        <button id="logout-no" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT PRODUCT MODAL -->
+  <div id="edit-product-modal" class="modal">
+    <div class="modal-content">
+      <h2>✏️ Edit Product</h2>
+      <form id="edit-product-form">
+        <input type="hidden" id="ep-id">
+        <div class="form-group">
+          <label>Product Name</label>
+          <input type="text" id="ep-name" required>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input list="ep-category-options" id="ep-category" required>
+          <datalist id="ep-category-options"></datalist>
+        </div>
+        <div class="two-column">
+          <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="ep-quantity" min="0" required>
+          </div>
+          <div class="form-group">
+            <label>Unit</label>
+            <select id="ep-unit" required>
+              <option value="PCS">PCS</option>
+              <option value="ROLLS">ROLLS</option>
+              <option value="BOX">BOX</option>
+              <option value="BUCKETS">BUCKETS</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-buttons" style="margin-top: 20px;">
+          <button type="submit" class="primary-btn">Save Changes</button>
+          <button type="button" class="secondary-btn" id="ep-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
+  <div id="confirm-action-modal" class="modal">
+    <div class="modal-content">
+      <div class="confirm-icon"><i data-lucide="alert-triangle" class="lucide-icon"
+          style="width:32px;height:32px;color:var(--amber-500);"></i></div>
+      <h2 id="confirm-action-title">Confirm Action</h2>
+      <p id="confirm-action-msg">Are you sure?</p>
+      <div class="modal-buttons">
+        <button id="confirm-action-yes" class="danger-btn" style="width:45%;margin:0;">Yes, Proceed</button>
+        <button id="confirm-action-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+          <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+        </div>
+      </div>
+
+      <nav>
+        <a href="dashboard.html">
+          <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+        </a>
+        <a href="inventory.html">
+          <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+        </a>
+        <div class="nav-divider"></div>
+        <a href="stock-in.html">
+          <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+        </a>
+        <a href="stock-out.html">
+          <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+        </a>
+        <div class="nav-divider"></div>
+        <a href="transactions.html">
+          <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+        </a>
+        <a href="users.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+        </a>
+      </nav>
+
+      <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+        <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon" style="width:14px;height:14px;"></i>
+          Dark Mode</span>
+        <div class="theme-switch"></div>
+      </div>
+
+      <div class="user-box">
+        <div class="user-info-row">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-details">
+            <p class="username" id="displayName"></p>
+            <p class="role" id="displayRole"></p>
+          </div>
+        </div>
+        <button onclick="confirmLogout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <h1>Inventory</h1>
+      <p class="page-desc">Manage and monitor all product stock</p>
+
+      <!-- NOTIFICATION BOXES -->
+      <div class="inventory-notifs">
+        <div class="notif-box total-items">
+          <h3>Total Items</h3>
+          <p id="total-items-count">—</p>
+        </div>
+        <div class="notif-box total-items"
+          style="background: rgba(59, 130, 246, 0.08); color: var(--blue-700); border: 1px solid rgba(59, 130, 246, 0.2);">
+          <h3 style="color: var(--blue-600);">Total Stock Quantity</h3>
+          <p id="total-stock-qty-inv" style="color: var(--blue-800);">—</p>
+        </div>
+        <div class="notif-box low-stock">
+          <h3>Low Stock Items</h3>
+          <p id="low-stock-count">—</p>
+        </div>
+      </div>
+
+      <!-- FILTER BAR -->
+      <div class="filter-bar">
+        <div class="search-wrapper">
+          <input type="text" id="inv-search" placeholder="Search product or ID...">
+          <span class="search-shortcut">Ctrl+K</span>
+        </div>
+        <select id="inv-category">
+          <option>All Categories</option>
+        </select>
+        <select id="inv-stock-filter">
+          <option>All Stock</option>
+          <option>Low Stock</option>
+          <option>Out of Stock</option>
+        </select>
+      </div>
+
+      <!-- INVENTORY TABLE -->
+      <div class="card">
+        <div class="card-header"
+          style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <h2 style="margin-bottom: 0 !important;"><i data-lucide="package" class="lucide-icon"></i> Product List</h2>
+          <div class="btn-group">
+            <button class="secondary-btn" onclick="window.print()"><i data-lucide="printer" class="lucide-icon"></i>
+              Print Report</button>
+            <button class="export-btn" id="export-btn"><i data-lucide="download" class="lucide-icon"></i> Export
+              CSV</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Product Name</th>
+              <th>Category</th>
+              <th>Unit</th>
+              <th>Quantity</th>
+              <th>Status</th>
+              <th>Date Added</th>
+              <th>User</th>
+              <th class="admin-only">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="inventory-body">
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- PAGINATION -->
+        <div class="pagination" id="inv-pagination">
+          <button class="secondary-btn" id="inv-prev" disabled>Previous</button>
+          <span class="page-info" id="inv-page-info">Page 1 of 1</span>
+          <button class="secondary-btn" id="inv-next" disabled>Next</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

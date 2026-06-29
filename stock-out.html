@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bhandol Hardware | Stock Out</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- WELCOME MODAL -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-modal">&times;</span>
+      <h2 id="modal-title"></h2>
+      <p id="modal-subtitle"></p>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div id="logout-modal" class="modal">
+    <div class="modal-content">
+      <h2>Confirm Logout</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+        <button id="logout-no" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STOCK OUT CONFIRMATION MODAL -->
+  <div id="stock-out-confirm" class="modal">
+    <div class="modal-content">
+      <h2><i data-lucide="alert-triangle" class="lucide-icon"></i> Confirm Stock Out</h2>
+      <p>Please review the details below before proceeding:</p>
+      <div class="confirm-details">
+        <strong>Product:</strong> <span id="confirm-product">—</span><br>
+        <strong>Quantity to deduct:</strong> <span id="confirm-qty">—</span><br>
+        <strong>Remaining after:</strong> <span id="confirm-remaining">—</span>
+      </div>
+      <div class="modal-buttons">
+        <button id="confirm-yes" class="danger-btn" style="width:45%;margin:0;">Confirm Deduction</button>
+        <button id="confirm-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
+  <div id="confirm-action-modal" class="modal">
+    <div class="modal-content">
+      <div class="confirm-icon"><i data-lucide="alert-triangle" class="lucide-icon"
+          style="width:32px;height:32px;color:var(--amber-500);"></i></div>
+      <h2 id="confirm-action-title">Confirm Action</h2>
+      <p id="confirm-action-msg">Are you sure?</p>
+      <div class="modal-buttons">
+        <button id="confirm-action-yes" class="danger-btn" style="width:45%;margin:0;">Yes, Proceed</button>
+        <button id="confirm-action-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+          <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+        </div>
+      </div>
+
+      <nav>
+        <a href="dashboard.html">
+          <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+        </a>
+        <a href="inventory.html">
+          <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+        </a>
+        <div class="nav-divider"></div>
+        <a href="stock-in.html">
+          <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+        </a>
+        <a href="stock-out.html">
+          <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+        </a>
+        <div class="nav-divider"></div>
+        <a href="transactions.html">
+          <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+        </a>
+        <a href="users.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+        </a>
+      </nav>
+
+      <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+        <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon" style="width:14px;height:14px;"></i>
+          Dark Mode</span>
+        <div class="theme-switch"></div>
+      </div>
+
+      <div class="user-box">
+        <div class="user-info-row">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-details">
+            <p class="username" id="displayName"></p>
+            <p class="role" id="displayRole"></p>
+          </div>
+        </div>
+        <button onclick="confirmLogout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <h1>Stock Out</h1>
+      <p class="page-desc">Deduct or dispense items from inventory</p>
+
+      <div class="two-column">
+
+        <!-- FORM -->
+        <div class="card">
+          <h2><i data-lucide="package-minus" class="lucide-icon"></i> New Stock Out Entry</h2>
+          <form id="stock-out-form">
+
+            <div class="form-group">
+              <label>Product to Deduct</label>
+              <div class="custom-dropdown-container">
+                <input type="text" id="so-product-search" placeholder="Search inventory..." autocomplete="off" required>
+                <div id="so-products-dropdown" class="custom-dropdown"></div>
+              </div>
+              <input type="hidden" id="so-product-id">
+              <div id="so-preview"
+                style="font-size:13px; margin-top:6px; font-weight:600; color:var(--blue-600); display:none;"></div>
+              <span class="error-msg" id="so-search-err"></span>
+            </div>
+
+            <div class="form-group">
+              <label>Unit</label>
+              <input type="text" id="so-unit" disabled>
+            </div>
+
+            <div class="form-group">
+              <label>Quantity to Deduct</label>
+              <div style="display:flex; align-items:center;">
+                <button type="button" class="stepper-btn"
+                  onclick="document.getElementById('so-quantity').stepDown(); document.getElementById('so-quantity').dispatchEvent(new Event('input'))"
+                  style="width:36px; height:36px; border:1px solid var(--surface-border); background:var(--surface-alt); border-radius:4px 0 0 4px; font-weight:bold;">-</button>
+                <input type="number" id="so-quantity" placeholder="Enter quantity" min="1" required
+                  style="border-radius:0; border-left:none; border-right:none; text-align:center;">
+                <button type="button" class="stepper-btn"
+                  onclick="document.getElementById('so-quantity').stepUp(); document.getElementById('so-quantity').dispatchEvent(new Event('input'))"
+                  style="width:36px; height:36px; border:1px solid var(--surface-border); background:var(--surface-alt); border-radius:0 4px 4px 0; font-weight:bold;">+</button>
+              </div>
+              <span class="error-msg" id="so-qty-err"></span>
+            </div>
+
+            <button type="submit" class="danger-btn">Deduct from Inventory</button>
+            <button type="button" id="so-clear" class="secondary-btn">Clear Form</button>
+          </form>
+        </div>
+
+        <!-- RECENT STOCK OUT -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h2 style="margin: 0;"><i data-lucide="clock" class="lucide-icon"></i> Recent Stock Outs</h2>
+            <button class="danger-btn admin-only" id="btn-clear-recent-so"
+              style="width: auto; margin: 0; padding: 4px 8px; font-size: 11px;"><i data-lucide="trash-2"
+                class="lucide-icon"></i> Clear Display</button>
+          </div>
+          <ul class="activity-list" id="recent-stock-out">
+            <li style="color:var(--slate-400);">Loading...</li>
+          </ul>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>

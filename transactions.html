@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bhandol Hardware | Transaction History</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+  <!-- WELCOME MODAL -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content">
+      <span id="close-modal">&times;</span>
+      <h2 id="modal-title"></h2>
+      <p id="modal-subtitle"></p>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div id="logout-modal" class="modal">
+    <div class="modal-content">
+      <h2>Confirm Logout</h2>
+      <p>Are you sure you want to log out?</p>
+      <div class="modal-buttons">
+        <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+        <button id="logout-no" class="secondary-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
+  <div id="confirm-action-modal" class="modal">
+    <div class="modal-content">
+      <div class="confirm-icon"><i data-lucide="alert-triangle" class="lucide-icon"
+          style="width:32px;height:32px;color:var(--amber-500);"></i></div>
+      <h2 id="confirm-action-title">Confirm Action</h2>
+      <p id="confirm-action-msg">Are you sure?</p>
+      <div class="modal-buttons">
+        <button id="confirm-action-yes" class="danger-btn" style="width:45%;margin:0;">Yes, Delete All</button>
+        <button id="confirm-action-no" class="secondary-btn" style="width:45%;margin:0;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+          <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+        </div>
+      </div>
+
+      <nav>
+        <a href="dashboard.html">
+          <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+        </a>
+        <a href="inventory.html">
+          <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+        </a>
+        <div class="nav-divider"></div>
+        <a href="stock-in.html">
+          <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+        </a>
+        <a href="stock-out.html">
+          <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+        </a>
+        <div class="nav-divider"></div>
+        <a href="transactions.html">
+          <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+        </a>
+        <a href="users.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+        </a>
+      </nav>
+
+      <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+        <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon" style="width:14px;height:14px;"></i>
+          Dark Mode</span>
+        <div class="theme-switch"></div>
+      </div>
+
+      <div class="user-box">
+        <div class="user-info-row">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-details">
+            <p class="username" id="displayName"></p>
+            <p class="role" id="displayRole"></p>
+          </div>
+        </div>
+        <button onclick="confirmLogout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <h1>Transaction History</h1>
+      <p class="page-desc">View and track all inventory movements</p>
+
+      <!-- SUMMARY -->
+      <div class="stats-grid">
+        <div class="stat-card success">
+          <div class="stat-icon"><i data-lucide="arrow-down-to-line" class="lucide-icon"></i></div>
+          <h3>Stock In</h3>
+          <p class="stat-number" id="txn-stock-in">—</p>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-icon"><i data-lucide="arrow-up-from-line" class="lucide-icon"></i></div>
+          <h3>Stock Out</h3>
+          <p class="stat-number" id="txn-stock-out">—</p>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon"><i data-lucide="bar-chart-3" class="lucide-icon"></i></div>
+          <h3>Net Movement</h3>
+          <p class="stat-number" id="txn-net">—</p>
+        </div>
+      </div>
+
+      <!-- FILTER BAR -->
+      <div class="filter-bar">
+        <div class="search-wrapper">
+          <input type="text" id="txn-search" placeholder="Search product or TXN ID...">
+          <span class="search-shortcut">Ctrl+K</span>
+        </div>
+        <select id="txn-category">
+          <option>All Categories</option>
+        </select>
+        <select id="txn-type">
+          <option>All Types</option>
+          <option>Stock In</option>
+          <option>Stock Out</option>
+        </select>
+        <div class="date-range-group">
+          <label>From</label>
+          <input type="date" id="txn-date-from">
+          <label>To</label>
+          <input type="date" id="txn-date-to">
+        </div>
+      </div>
+
+      <!-- TRANSACTION TABLE -->
+      <div class="card">
+        <div class="card-header"
+          style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <h2 style="margin-bottom: 0 !important;"><i data-lucide="clipboard-list" class="lucide-icon"></i> All
+            Transactions</h2>
+          <div class="btn-group">
+            <button class="secondary-btn" onclick="window.print()"><i data-lucide="printer" class="lucide-icon"></i>
+              Print Report</button>
+            <button class="export-btn" id="txn-export"><i data-lucide="download" class="lucide-icon"></i> Export
+              CSV</button>
+            <button class="danger-btn admin-only" id="txn-clear-all"><i data-lucide="trash-2" class="lucide-icon"></i>
+              Clear All</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>TXN ID</th>
+              <th>Product</th>
+              <th>Category</th>
+              <th>Type</th>
+              <th>Quantity</th>
+              <th>Unit</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>User</th>
+            </tr>
+          </thead>
+          <tbody id="txn-body">
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+            <tr class="skeleton-row">
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar tiny"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+              <td>
+                <div class="skeleton-bar short"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- PAGINATION -->
+        <div class="pagination" id="txn-pagination">
+          <button class="secondary-btn" id="txn-prev" disabled>Previous</button>
+          <span class="page-info" id="txn-page-info">Page 1 of 1</span>
+          <button class="secondary-btn" id="txn-next" disabled>Next</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="assets/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>
