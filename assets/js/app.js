@@ -2768,7 +2768,368 @@ function initTheme() {
       }
     });
   }
+
 }
+
+// =============================================
+//  TRANSACTION STAT CARD MODALS
+// =============================================
+
+let _txnNetChartInstance = null;
+
+// Read the active date pickers from the transactions page filter bar
+function getActiveTxnDateFilter() {
+  return {
+    dateFrom: document.getElementById('txn-date-from')?.value || '',
+    dateTo: document.getElementById('txn-date-to')?.value || ''
+  };
+}
+
+// Reuse same DD/MM/YYYY → YYYY-MM-DD parsing already in applyFilters
+function _filterTxnsByDate(txns, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return txns;
+  return txns.filter(t => {
+    const parts = t.date.split('/');
+    if (parts.length !== 3) return true;
+    const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    if (dateFrom && iso < dateFrom) return false;
+    if (dateTo && iso > dateTo) return false;
+    return true;
+  });
+}
+
+// --- Shared inner HTML builders ---
+
+function _buildHighlightWidget(title, icon, items, accentCss) {
+  if (items.length === 0) {
+    return `<div style="color:var(--slate-400);font-size:13px;padding:12px 0;">No data available for the selected period.</div>`;
+  }
+  const maxVal = items[0].value;
+  return `
+    <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:20px;border:1px solid var(--surface-border);flex-shrink:0;">
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:18px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="${icon}" class="lucide-icon" style="width:14px;height:14px;"></i>${title}
+      </h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${items.map((item, i) => `
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:11px;font-weight:700;color:var(--slate-400);width:18px;text-align:center;flex-shrink:0;">${i + 1}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:8px;">
+                <span style="font-size:13px;font-weight:600;color:var(--slate-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</span>
+                <span style="font-size:12px;font-weight:700;flex-shrink:0;${accentCss}">${item.value.toLocaleString()} units</span>
+              </div>
+              <div style="height:5px;background:var(--surface-border-strong);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${maxVal > 0 ? Math.round((item.value / maxVal) * 100) : 0}%;${accentCss.includes('green') ? 'background:var(--green-500)' : 'background:var(--red-500)'};border-radius:3px;"></div>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function _buildReportTable(headers, rows, emptyMsg) {
+  if (rows.length === 0) {
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 0;color:var(--slate-400);">
+        <i data-lucide="file-search" class="lucide-icon" style="width:44px;height:44px;color:var(--slate-300);margin-bottom:14px;"></i>
+        <h3 style="margin:0 0 6px;color:var(--slate-500);font-weight:500;">${emptyMsg}</h3>
+        <p style="margin:0;font-size:13px;">Adjust the date filter or check back when records are available.</p>
+      </div>`;
+  }
+  return `
+    <div style="overflow:auto;border-radius:var(--radius-md);border:1px solid var(--surface-border);">
+      <table style="width:100%;border-collapse:collapse;text-align:left;">
+        <thead style="background:var(--surface-alt);position:sticky;top:0;z-index:5;border-bottom:1px solid var(--surface-border);">
+          <tr>${headers.map(h => `<th style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);white-space:nowrap;">${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${rows.map((cells, ri) => `
+            <tr style="border-bottom:1px solid var(--surface-border);${ri % 2 === 1 ? 'background:var(--surface-strong);' : ''}">
+              ${cells.map(c => `<td style="padding:9px 16px;font-size:13px;">${c}</td>`).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// --- Individual report renderers ---
+
+function _renderStockInReport(txns, bodyEl) {
+  // Top 5 by total quantity stocked in
+  const totals = {};
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + t.quantity; });
+  const top5 = Object.entries(totals)
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([name, value]) => ({ name, value }));
+
+  const highlightHtml = _buildHighlightWidget(
+    'Most Frequently Stocked Items — Top 5 by Volume',
+    'trending-up', top5,
+    'color:var(--green-600);'
+  );
+
+  const tableRows = [...txns].reverse().map(t => [
+    t.date, t.time,
+    `<strong style="color:var(--slate-700);">${t.product}</strong>`,
+    categoryBadge(t.category),
+    `<span style="font-weight:700;color:var(--green-600);">+${Math.abs(t.quantity).toLocaleString()}</span>`,
+    t.unit,
+    t.user
+  ]);
+
+  bodyEl.innerHTML = `
+    ${highlightHtml}
+    <div>
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="list" class="lucide-icon" style="width:14px;height:14px;"></i>
+        Full Stock In Log &mdash; ${txns.length} record${txns.length !== 1 ? 's' : ''}
+      </h3>
+      ${_buildReportTable(
+        ['Date', 'Time', 'Product', 'Category', 'Qty Added', 'Unit', 'User'],
+        tableRows,
+        'No Stock In data recorded for this period'
+      )}
+    </div>`;
+}
+
+function _renderStockOutReport(txns, bodyEl) {
+  const totals = {};
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + Math.abs(t.quantity); });
+  const top5 = Object.entries(totals)
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([name, value]) => ({ name, value }));
+
+  const highlightHtml = _buildHighlightWidget(
+    'Top Deficit — Most Stocked Out Items',
+    'trending-down', top5,
+    'color:var(--red-600);'
+  );
+
+  const tableRows = [...txns].reverse().map(t => [
+    t.date, t.time,
+    `<strong style="color:var(--slate-700);">${t.product}</strong>`,
+    categoryBadge(t.category),
+    // Always show absolute positive quantity for readability
+    `<span style="font-weight:700;color:var(--red-600);">${Math.abs(t.quantity).toLocaleString()}</span>`,
+    t.unit,
+    t.user
+  ]);
+
+  bodyEl.innerHTML = `
+    ${highlightHtml}
+    <div>
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="list" class="lucide-icon" style="width:14px;height:14px;"></i>
+        Full Stock Out Log &mdash; ${txns.length} record${txns.length !== 1 ? 's' : ''}
+      </h3>
+      ${_buildReportTable(
+        ['Date', 'Time', 'Product', 'Category', 'Qty Deducted', 'Unit', 'User'],
+        tableRows,
+        'No Stock Out data recorded for this period'
+      )}
+    </div>`;
+}
+
+function _renderNetMovementReport(txns, bodyEl) {
+  const isDark = document.body.classList.contains('dark-mode');
+  const textColor = isDark ? '#c8d6e5' : '#64748b';
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+
+  // Aggregate per category
+  const cats = {};
+  txns.forEach(t => {
+    if (!cats[t.category]) cats[t.category] = { in: 0, out: 0 };
+    if (t.type === 'Stock In') cats[t.category].in += t.quantity;
+    else cats[t.category].out += Math.abs(t.quantity);
+  });
+
+  const labels = Object.keys(cats);
+  const inData = labels.map(c => cats[c].in);
+  const outData = labels.map(c => cats[c].out);
+  const netData = labels.map(c => cats[c].in - cats[c].out);
+
+  const totalIn = inData.reduce((a, b) => a + b, 0);
+  const totalOut = outData.reduce((a, b) => a + b, 0);
+  const totalNet = totalIn - totalOut;
+
+  // Top-level summary KPI strip
+  const summaryHtml = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex-shrink:0;">
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Stock In</div>
+        <div style="font-size:30px;font-weight:700;color:var(--green-600);">+${totalIn.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Stock Out</div>
+        <div style="font-size:30px;font-weight:700;color:var(--red-600);">${totalOut.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Net Movement</div>
+        <div style="font-size:30px;font-weight:700;${totalNet >= 0 ? 'color:var(--green-600)' : 'color:var(--red-600)'};">${totalNet >= 0 ? '+' : ''}${totalNet.toLocaleString()}</div>
+      </div>
+    </div>`;
+
+  if (labels.length === 0) {
+    bodyEl.innerHTML = summaryHtml + `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 0;color:var(--slate-400);">
+        <i data-lucide="bar-chart-2" class="lucide-icon" style="width:44px;height:44px;color:var(--slate-300);margin-bottom:14px;"></i>
+        <h3 style="margin:0 0 6px;color:var(--slate-500);font-weight:500;">No movement data for this period</h3>
+        <p style="margin:0;font-size:13px;">Adjust the date filter or add transactions to see analysis.</p>
+      </div>`;
+    return;
+  }
+
+  // Per-category breakdown table rows
+  const tableRows = labels.map(cat => {
+    const d = cats[cat];
+    const net = d.in - d.out;
+    return [
+      categoryBadge(cat),
+      `<span style="font-weight:600;color:var(--green-600);">+${d.in.toLocaleString()}</span>`,
+      `<span style="font-weight:600;color:var(--red-600);">${d.out.toLocaleString()}</span>`,
+      `<span style="font-weight:700;${net >= 0 ? 'color:var(--green-600)' : 'color:var(--red-600)'};">${net >= 0 ? '+' : ''}${net.toLocaleString()}</span>`
+    ];
+  });
+
+  bodyEl.innerHTML = `
+    ${summaryHtml}
+    <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:20px;border:1px solid var(--surface-border);flex-shrink:0;">
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="bar-chart-3" class="lucide-icon" style="width:14px;height:14px;"></i>Category Flow Breakdown
+      </h3>
+      <div style="position:relative;height:280px;">
+        <canvas id="txn-net-chart"></canvas>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="table-2" class="lucide-icon" style="width:14px;height:14px;"></i>Net Movement by Category
+      </h3>
+      ${_buildReportTable(
+        ['Category', 'Total In', 'Total Out', 'Net Movement'],
+        tableRows,
+        'No category data available'
+      )}
+    </div>`;
+
+  // Render chart after DOM paints
+  requestAnimationFrame(() => {
+    const canvas = document.getElementById('txn-net-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
+
+    _txnNetChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Stock In',
+            data: inData,
+            backgroundColor: 'rgba(34,197,94,0.75)',
+            borderRadius: 5,
+            maxBarThickness: 32
+          },
+          {
+            label: 'Stock Out',
+            data: outData,
+            backgroundColor: 'rgba(239,68,68,0.75)',
+            borderRadius: 5,
+            maxBarThickness: 32
+          },
+          {
+            label: 'Net',
+            data: netData,
+            // Positive net → blue accent; negative → red tint
+            backgroundColor: netData.map(v => v >= 0 ? 'rgba(59,130,246,0.75)' : 'rgba(239,68,68,0.4)'),
+            borderRadius: 5,
+            maxBarThickness: 32
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              color: textColor,
+              font: { family: 'Inter', size: 12 },
+              padding: 16,
+              usePointStyle: true,
+              boxWidth: 8
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15,23,42,0.95)',
+            titleFont: { family: 'Inter', size: 13, weight: '600' },
+            bodyFont: { family: 'Inter', size: 12 },
+            padding: 12, cornerRadius: 8,
+            borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: textColor, font: { family: 'Inter', size: 11 } },
+            grid: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: textColor, font: { family: 'Inter', size: 11 } },
+            grid: { color: gridColor, borderDash: [5, 5] },
+            border: { display: false }
+          }
+        }
+      }
+    });
+  });
+}
+
+// --- Public API ---
+
+window.openTxnReportModal = function (type) {
+  const modal = document.getElementById('txn-report-modal');
+  const titleEl = document.getElementById('txn-report-title');
+  const bodyEl = document.getElementById('txn-report-body');
+  if (!modal || !titleEl || !bodyEl) return;
+
+  // Tear down any stale chart before rebuilding
+  if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
+  bodyEl.innerHTML = '';
+
+  // Grab the active date filter from the page
+  const { dateFrom, dateTo } = getActiveTxnDateFilter();
+  // Use already-filtered set so category/search/type dropdowns are also respected
+  const baseTxns = currentFilteredTxns || getTransactions();
+  const dateTxns = _filterTxnsByDate(baseTxns, dateFrom, dateTo);
+
+  if (type === 'in') {
+    const txns = dateTxns.filter(t => t.type === 'Stock In');
+    titleEl.innerHTML = `<i data-lucide="arrow-down-to-line" class="lucide-icon" style="width:20px;height:20px;color:var(--green-600);flex-shrink:0;"></i> Stock In Report`;
+    _renderStockInReport(txns, bodyEl);
+  } else if (type === 'out') {
+    const txns = dateTxns.filter(t => t.type === 'Stock Out');
+    titleEl.innerHTML = `<i data-lucide="arrow-up-from-line" class="lucide-icon" style="width:20px;height:20px;color:var(--red-600);flex-shrink:0;"></i> Stock Out Report`;
+    _renderStockOutReport(txns, bodyEl);
+  } else if (type === 'net') {
+    titleEl.innerHTML = `<i data-lucide="bar-chart-3" class="lucide-icon" style="width:20px;height:20px;color:var(--blue-600);flex-shrink:0;"></i> Inventory Flow & Trend Analysis`;
+    _renderNetMovementReport(dateTxns, bodyEl);
+  }
+
+  modal.style.display = 'flex';
+  if (window.lucide) window.lucide.createIcons({ node: modal });
+  // Close on backdrop click
+  modal.onclick = (e) => { if (e.target === modal) window.closeTxnReportModal(); };
+};
+
+window.closeTxnReportModal = function () {
+  const modal = document.getElementById('txn-report-modal');
+  if (modal) modal.style.display = 'none';
+  if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
+};
 
 // =============================================
 //  ANIMATED STAT COUNTERS

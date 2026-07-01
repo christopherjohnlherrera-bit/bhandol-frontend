@@ -3777,4 +3777,62 @@ body.dark-mode .lsp-switch input:checked+.lsp-slider {
 .table-scroll-container table th {
   background: var(--bg-card); /* Keep header opaque so scrolling content doesn't bleed through! */
 }
+
+/* =============================================
+   CLICKABLE STAT CARDS (Transactions Page)
+   ============================================= */
+
+.stat-card.clickable {
+  cursor: pointer;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md), 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.stat-card.clickable:active {
+  transform: translateY(-1px);
+}
+
+.stat-card.clickable::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(59, 130, 246, 0.04);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  pointer-events: none;
+}
+
+.stat-card.clickable:hover::before {
+  opacity: 1;
+}
+
+/* =============================================
+   TXN REPORT MODAL — Dark Mode
+   ============================================= */
+
+/* Header title and section h3s */
+body.dark-mode #txn-report-modal h2,
+body.dark-mode #txn-report-modal h3 {
+  color: var(--slate-700); /* remaps to #c8d6e5 in dark mode */
+}
+
+/* Header bar background */
+body.dark-mode .txn-report-header {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom-color: var(--surface-border);
+}
+
+/* Table cells inside the report modal */
+body.dark-mode #txn-report-body td {
+  color: var(--slate-700); /* #c8d6e5 in dark mode */
+}
+
+/* Highlight widget panels */
+body.dark-mode #txn-report-body .report-highlight {
+  background: var(--surface-strong);
+}
 

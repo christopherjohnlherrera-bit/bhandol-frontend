@@ -105,17 +105,17 @@
 
       <!-- SUMMARY -->
       <div class="stats-grid">
-        <div class="stat-card success">
+        <div class="stat-card success clickable" title="Click to view Stock In report" onclick="openTxnReportModal('in')">
           <div class="stat-icon"><i data-lucide="arrow-down-to-line" class="lucide-icon"></i></div>
           <h3>Stock In</h3>
           <p class="stat-number" id="txn-stock-in">—</p>
         </div>
-        <div class="stat-card danger">
+        <div class="stat-card danger clickable" title="Click to view Stock Out report" onclick="openTxnReportModal('out')">
           <div class="stat-icon"><i data-lucide="arrow-up-from-line" class="lucide-icon"></i></div>
           <h3>Stock Out</h3>
           <p class="stat-number" id="txn-stock-out">—</p>
         </div>
-        <div class="stat-card">
+        <div class="stat-card clickable" title="Click to view Net Movement analysis" onclick="openTxnReportModal('net')">
           <div class="stat-icon"><i data-lucide="bar-chart-3" class="lucide-icon"></i></div>
           <h3>Net Movement</h3>
           <p class="stat-number" id="txn-net">—</p>
@@ -275,6 +275,26 @@
     </main>
   </div>
 
+  <!-- TXN REPORT MODAL -->
+  <div id="txn-report-modal" class="modal">
+    <div class="modal-content txn-report-content"
+      style="width:92%;max-width:1100px;height:88vh;display:flex;flex-direction:column;padding:0;background:var(--surface-alt);overflow:hidden;border-radius:var(--radius-lg);">
+      <!-- Header -->
+      <div class="txn-report-header"
+        style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--surface-border);background:var(--surface-alt);flex-shrink:0;">
+        <h2 id="txn-report-title"
+          style="margin:0;font-size:18px;color:var(--slate-700);display:flex;align-items:center;gap:12px;"></h2>
+        <button class="icon-btn" onclick="closeTxnReportModal()" title="Close"
+          style="color:var(--slate-500);"><i data-lucide="x" class="lucide-icon"
+            style="width:22px;height:22px;"></i></button>
+      </div>
+      <!-- Scrollable body -->
+      <div id="txn-report-body"
+        style="flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:20px;"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="assets/js/app.js"></script>
   <script>lucide.createIcons();</script>
 </body>
