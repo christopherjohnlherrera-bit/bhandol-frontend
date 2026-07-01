@@ -205,44 +205,52 @@
         </div>
       </div>
 
-      <!-- LOW STOCK THRESHOLD SETTING -->
-      <div class="card admin-only" style="margin-bottom: 24px;">
-        <h2><i data-lucide="settings" class="lucide-icon"></i> Low Stock Threshold</h2>
-        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-          Set the quantity threshold below which items are flagged as "Low Stock" across the system.
+      <!-- SETTINGS PANEL: Low Stock Threshold + System Tools (merged) -->
+      <div class="card admin-only" id="system-tools-card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 4px;"><i data-lucide="settings" class="lucide-icon"></i> System Settings</h2>
+        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 20px;">
+          Configure inventory thresholds and manage data backups for the system.
         </p>
 
-        <!-- Low Stock Protection toggle — injected by JS at runtime -->
-        <div id="low-stock-protection-container" style="margin-bottom: 16px;"></div>
+        <!-- Two-column grid: Low Stock on the left, Data Backup on the right -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;">
 
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="form-group" style="margin-bottom: 0; flex: 1;">
-            <label>Threshold Quantity</label>
-            <input type="number" id="low-stock-threshold" min="1" max="999" value="8" style="width: 100%;">
+          <!-- Left: Low Stock Threshold -->
+          <div style="border-right: 1px solid var(--surface-border); padding-right: 24px;">
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--navy-900);"><i data-lucide="alert-triangle" class="lucide-icon" style="width:14px;height:14px;"></i> Low Stock Threshold</h3>
+            <p style="font-size: 12.5px; color: var(--slate-500); margin-bottom: 12px;">
+              Items at or below this quantity will be flagged as Low Stock.
+            </p>
+
+            <!-- Low Stock Protection toggle — injected by JS at runtime -->
+            <div id="low-stock-protection-container" style="margin-bottom: 12px;"></div>
+
+            <div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;">
+              <div class="form-group" style="margin-bottom: 0; max-width: 140px;">
+                <label>Threshold Quantity</label>
+                <input type="number" id="low-stock-threshold" min="1" max="999" value="8" style="width: 100%;">
+              </div>
+              <button class="primary-btn" id="btn-save-threshold"
+                style="width: auto; padding: 10px 20px; white-space: nowrap;"><i data-lucide="save" class="lucide-icon"></i> Save</button>
+            </div>
+            <p style="font-size: 12px; color: var(--slate-400); margin-top: 8px;">
+              Current threshold: <strong id="current-threshold-display">8</strong> units
+            </p>
           </div>
-          <button class="primary-btn" id="btn-save-threshold"
-            style="width: auto; margin-top: 22px; padding: 11px 24px;"><i data-lucide="save" class="lucide-icon"></i>
-            Save</button>
-        </div>
-        <p style="font-size: 12px; color: var(--slate-400); margin-top: 10px;">
-          Current threshold: <strong id="current-threshold-display">8</strong> units
-        </p>
-      </div>
 
-      <!-- SYSTEM TOOLS (Admin Only) -->
-      <div class="card admin-only" id="system-tools-card">
-        <h2><i data-lucide="settings" class="lucide-icon"></i> System Tools (Data Backup)</h2>
-        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-          Download a full snapshot of your system data (users, products, and transactions), or restore the system from a
-          previous backup file.
-        </p>
-        <div style="display: flex; gap: 12px;">
-          <button class="primary-btn" id="btn-download-backup" style="width: auto;"><i data-lucide="download"
-              class="lucide-icon"></i> Download System Backup
-            (.json)</button>
-          <button class="secondary-btn" id="btn-restore-backup" style="width: auto;"><i data-lucide="upload"
-              class="lucide-icon"></i> Restore Backup</button>
-          <input type="file" id="restore-file-input" accept=".json" style="display: none;">
+          <!-- Right: Data Backup -->
+          <div>
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--navy-900);"><i data-lucide="database" class="lucide-icon" style="width:14px;height:14px;"></i> Data Backup</h3>
+            <p style="font-size: 12.5px; color: var(--slate-500); margin-bottom: 12px;">
+              Download a full snapshot of your data (users, products, transactions), or restore from a backup file.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+              <button class="primary-btn" id="btn-download-backup" style="width: auto;"><i data-lucide="download" class="lucide-icon"></i> Download Backup (.json)</button>
+              <button class="secondary-btn" id="btn-restore-backup" style="width: auto;"><i data-lucide="upload" class="lucide-icon"></i> Restore Backup</button>
+              <input type="file" id="restore-file-input" accept=".json" style="display: none;">
+            </div>
+          </div>
+
         </div>
       </div>
 

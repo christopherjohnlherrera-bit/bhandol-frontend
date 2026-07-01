@@ -908,6 +908,10 @@ function renderDashboardCharts(txns, products) {
     borderWidth: 1
   };
 
+  // ── Compute text color based on current theme ──
+  const isDarkBar = document.body.classList.contains('dark-mode');
+  const barTextColor = isDarkBar ? '#c8d6e5' : '#64748b';
+
   if (window.dashboardBarChart) window.dashboardBarChart.destroy();
   window.dashboardBarChart = new Chart(barCtx, {
     type: 'bar',
@@ -926,7 +930,7 @@ function renderDashboardCharts(txns, products) {
         intersect: false,
       },
       plugins: {
-        legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 12 }, padding: 20, usePointStyle: true, boxWidth: 8 } },
+        legend: { position: 'bottom', labels: { color: barTextColor, font: { family: 'Inter', size: 12 }, padding: 20, usePointStyle: true, boxWidth: 8 } },
         tooltip: {
           ...tooltipConfig,
           callbacks: {
@@ -939,11 +943,11 @@ function renderDashboardCharts(txns, products) {
       scales: {
         x: {
           grid: { display: false, drawBorder: false },
-          ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b' } // Slate 500
+          ticks: { font: { family: 'Inter', size: 11 }, color: barTextColor }
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b', padding: 8 },
+          ticks: { font: { family: 'Inter', size: 11 }, color: barTextColor, padding: 8 },
           grid: { color: 'rgba(0,0,0,0.06)', drawBorder: false, borderDash: [5, 5] },
           border: { display: false }
         }
@@ -1002,6 +1006,7 @@ function renderDashboardCharts(txns, products) {
         legend: {
           position: 'bottom',
           labels: {
+            color: isDark ? '#c8d6e5' : '#64748b',
             font: { family: 'Inter', size: 12 },
             padding: 20,
             usePointStyle: true,
@@ -2744,7 +2749,22 @@ function initTheme() {
           ? getComputedStyle(document.body).getPropertyValue('--slate-800').trim()
           : getComputedStyle(document.body).getPropertyValue('--navy-800').trim();
         window.dashboardPieChart.data.datasets[0].borderColor = newColor;
+        // Update legend label color for dark mode legibility
+        window.dashboardPieChart.options.plugins.legend.labels.color = isDark ? '#c8d6e5' : '#64748b';
         window.dashboardPieChart.update();
+      }
+      // Dynamically update bar chart axis/legend colors for dark mode
+      if (window.dashboardBarChart) {
+        const isDark = mode === "dark";
+        const newTextColor = isDark ? '#c8d6e5' : '#64748b';
+        const chart = window.dashboardBarChart;
+        if (chart.options.scales && chart.options.scales.x && chart.options.scales.x.ticks)
+          chart.options.scales.x.ticks.color = newTextColor;
+        if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks)
+          chart.options.scales.y.ticks.color = newTextColor;
+        if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels)
+          chart.options.plugins.legend.labels.color = newTextColor;
+        chart.update();
       }
     });
   }
