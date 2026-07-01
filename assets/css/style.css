@@ -2374,7 +2374,7 @@ table tbody tr:hover td:first-child {
    ACTIVITY TIMELINE
    ======================================================== */
 .timeline {
-  max-height: 320px;
+  max-height: 520px;
   overflow-y: auto;
   padding: 4px 0;
 }
@@ -3704,11 +3704,11 @@ body.dark-mode .wf-content .stat-number {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
-.lsp-switch input:checked + .lsp-slider {
+.lsp-switch input:checked+.lsp-slider {
   background: var(--blue-600, #2563eb);
 }
 
-.lsp-switch input:checked + .lsp-slider::before {
+.lsp-switch input:checked+.lsp-slider::before {
   transform: translateX(20px);
 }
 
@@ -3734,7 +3734,7 @@ body.dark-mode .lsp-slider {
   background: var(--slate-600, #475569);
 }
 
-body.dark-mode .lsp-switch input:checked + .lsp-slider {
+body.dark-mode .lsp-switch input:checked+.lsp-slider {
   background: var(--blue-500, #3b82f6);
 }
 

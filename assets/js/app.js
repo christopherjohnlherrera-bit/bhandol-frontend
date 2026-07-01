@@ -442,7 +442,6 @@ function renderUserTable(users) {
         <td style="text-transform: capitalize;">${u.role}</td>
         <td><span class="status ${statusClass}">${u.status}</span></td>
         <td style="white-space: nowrap;">
-          <button class="action-icon-btn" onclick="viewCredentials('${u.id}')" title="View Credentials"><i data-lucide="eye" class="lucide-icon"></i></button>
           ${toggleBtn}
           ${deleteBtn}
         </td>
@@ -662,24 +661,34 @@ function loadDashboard() {
     }
   }
 
-  const tbody = document.getElementById("recent-txn-body");
-  if (tbody) {
+  const timelineContainer = document.getElementById("recent-txn-body");
+  if (timelineContainer) {
     // Filter out transactions cleared by the user
     const clearedAfter = localStorage.getItem("clearDashRecentAfter") || "";
     const visibleTxns = clearedAfter
       ? txns.filter(t => isTxnIdGreaterThan(t.id, clearedAfter))
       : txns;
-    const recent = visibleTxns.slice(-5).reverse();
-    tbody.innerHTML = recent.length === 0
-      ? `<tr><td colspan="5" style="text-align:center;color:var(--slate-400);">No transactions yet.</td></tr>`
-      : recent.map(t => `
-      <tr>
-        <td>${t.date}</td>
-        <td>${t.product}</td>
-        <td><span class="status ${t.type === 'Stock In' ? 'txn-in' : 'txn-out'}">${t.type}</span></td>
-        <td>${t.quantity}</td>
-        <td>${t.user}</td>
-      </tr>`).join("");
+    const recent = visibleTxns.slice(-10).reverse();
+    if (recent.length === 0) {
+      timelineContainer.innerHTML = '<div style="text-align:center; color:var(--slate-400); padding: 20px 0;">No transactions yet.</div>';
+    } else {
+      timelineContainer.innerHTML = recent.map(t => {
+        const isIn = t.type === 'Stock In';
+        const dotClass = isIn ? 'stock-in' : 'stock-out';
+        const iconName = isIn ? 'package-plus' : 'package-minus';
+        const verb = isIn ? 'added' : 'deducted';
+        return `
+          <div class="timeline-item">
+            <div class="timeline-dot ${dotClass}"><i data-lucide="${iconName}" class="lucide-icon" style="width:14px;height:14px;margin-bottom:2px;"></i></div>
+            <div class="timeline-body">
+              <strong>${t.quantity} ${t.unit} of ${t.product} ${verb}</strong>
+              <p>By ${t.user} · ${t.category}</p>
+            </div>
+            <div class="timeline-time">${t.date}<br>${t.time}</div>
+          </div>`;
+      }).join("");
+      if (window.lucide) window.lucide.createIcons();
+    }
   }
 
   // Backup & Restore Logic
@@ -736,7 +745,7 @@ function loadDashboard() {
   }
 
   renderDashboardCharts(txns, products);
-  renderHeatmap(txns);
+
 
   // Bind the Out of Stock Toggle
   const toggleStockBtn = document.getElementById("toggle-out-of-stock");
@@ -751,21 +760,13 @@ function loadDashboard() {
       // Store the last TXN ID so on refresh, older items stay hidden
       const lastTxn = txns.length > 0 ? txns[txns.length - 1].id : "";
       if (lastTxn) localStorage.setItem("clearDashRecentAfter", lastTxn);
-      const tbody = document.getElementById("recent-txn-body");
-      if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--slate-400);">No transactions yet.</td></tr>`;
+      const timelineContainer = document.getElementById("recent-txn-body");
+      if (timelineContainer) timelineContainer.innerHTML = '<div style="text-align:center; color:var(--slate-400); padding: 20px 0;">No transactions yet.</div>';
       setText("stock-in-month", 0);
       setText("stock-out-month", 0);
-      // Also clear the activity timeline
-      const timeline = document.getElementById("activity-timeline");
-      if (timeline) timeline.innerHTML = '<div style="text-align:center; color:var(--slate-400); padding: 20px 0;">No recent activity.</div>';
-      showToast('success', 'Display Cleared', 'Recent transactions display has been cleared.');
+      showToast('success', 'Display Cleared', 'Transaction history display has been cleared.');
     });
   }
-
-  // Activity Timeline — respects dashboard clear cutoff
-  const dashClearedAfter = localStorage.getItem("clearDashRecentAfter") || "";
-  const timelineTxns = dashClearedAfter ? txns.filter(t => t.id > dashClearedAfter) : txns;
-  renderActivityTimeline(timelineTxns);
 
   // Low Stock Threshold Setting
   setupLowStockThreshold();
@@ -788,8 +789,10 @@ function loadDashboard() {
           localStorage.setItem("clearExportLogAfter", String(logs[0].id));
         }
       } catch (e) { /* still clear the UI even if fetch fails */ }
-      const tbody = document.getElementById("export-log-body");
-      if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td></tr>`;
+      // Reset pagination state
+      exportLogAllLogs = [];
+      exportLogCurrentPage = 1;
+      renderExportLogPage();
       showToast('success', 'Display Cleared', 'Export log display has been cleared.');
     });
   }
@@ -1398,8 +1401,49 @@ function setupLowStockThreshold() {
 
 
 // =============================================
-//  EXPORT LOGS (Admin Dashboard)
+//  EXPORT LOGS (Admin Dashboard) — Paginated
 // =============================================
+let exportLogAllLogs = [];
+let exportLogCurrentPage = 1;
+const EXPORT_LOG_PAGE_SIZE = 10;
+
+function renderExportLogPage() {
+  const tbody = document.getElementById("export-log-body");
+  const pageInfo = document.getElementById("export-log-page-info");
+  const prevBtn = document.getElementById("export-log-prev");
+  const nextBtn = document.getElementById("export-log-next");
+  if (!tbody) return;
+
+  const totalPages = Math.ceil(exportLogAllLogs.length / EXPORT_LOG_PAGE_SIZE) || 1;
+  if (exportLogCurrentPage > totalPages) exportLogCurrentPage = totalPages;
+
+  const start = (exportLogCurrentPage - 1) * EXPORT_LOG_PAGE_SIZE;
+  const pageLogs = exportLogAllLogs.slice(start, start + EXPORT_LOG_PAGE_SIZE);
+
+  if (pageLogs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td></tr>`;
+  } else {
+    tbody.innerHTML = pageLogs.map(l => `
+      <tr>
+        <td>${l.date}</td>
+        <td>${l.time}</td>
+        <td>${l.user}</td>
+        <td>${l.type}</td>
+      </tr>`).join("");
+  }
+
+  if (pageInfo) pageInfo.textContent = `Page ${exportLogCurrentPage} of ${totalPages}`;
+  if (prevBtn) {
+    prevBtn.disabled = exportLogCurrentPage <= 1;
+    prevBtn.onclick = () => { if (exportLogCurrentPage > 1) { exportLogCurrentPage--; renderExportLogPage(); } };
+  }
+  if (nextBtn) {
+    nextBtn.disabled = exportLogCurrentPage >= totalPages;
+    nextBtn.onclick = () => { if (exportLogCurrentPage < totalPages) { exportLogCurrentPage++; renderExportLogPage(); } };
+  }
+  if (window.lucide) window.lucide.createIcons({ root: document.getElementById("export-log-card") });
+}
+
 async function loadExportLogs() {
   const tbody = document.getElementById("export-log-body");
   if (!tbody) return;
@@ -1408,18 +1452,9 @@ async function loadExportLogs() {
     const allLogs = await res.json();
     // Filter out logs that were cleared by the user (ID-based)
     const clearedAfter = parseInt(localStorage.getItem("clearExportLogAfter") || "0", 10);
-    const logs = clearedAfter > 0 ? allLogs.filter(l => l.id > clearedAfter) : allLogs;
-    if (logs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td></tr>`;
-    } else {
-      tbody.innerHTML = logs.map(l => `
-        <tr>
-          <td>${l.date}</td>
-          <td>${l.time}</td>
-          <td>${l.user}</td>
-          <td>${l.type}</td>
-        </tr>`).join("");
-    }
+    exportLogAllLogs = clearedAfter > 0 ? allLogs.filter(l => l.id > clearedAfter) : allLogs;
+    exportLogCurrentPage = 1;
+    renderExportLogPage();
   } catch (err) {
     console.error("Failed to load export logs", err);
   }

@@ -191,129 +191,47 @@
         </div>
       </div>
 
-      <!-- HEATMAP (Phase 9) -->
-      <div class="card" id="card-activity-pulse" style="margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h2 style="margin: 0; font-size: 16px;"><i data-lucide="calendar-days" class="lucide-icon"></i> Store Activity
-            Pulse (Last 30 Days)</h2>
-          <button class="icon-btn maximize-btn" title="Expand Widget"
-            onclick="openWidgetFullscreen('card-activity-pulse')"><i data-lucide="maximize" class="lucide-icon"
-              style="width:16px;height:16px;"></i></button>
-        </div>
-        <div id="activity-heatmap" class="heatmap-container">
-          <!-- JS injected heatmap cells -->
-        </div>
-      </div>
 
-      <!-- RECENT TRANSACTIONS -->
+
+      <!-- RECENT TRANSACTIONS (Timeline Style) -->
       <div class="card" style="margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <h2 style="margin: 0;"><i data-lucide="clipboard-list" class="lucide-icon"></i> Recent Transactions</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 style="margin: 0;"><i data-lucide="clipboard-list" class="lucide-icon"></i> Transaction History</h2>
           <button class="danger-btn admin-only" id="btn-clear-recent-txns"
             style="width: auto; margin: 0; padding: 8px 16px; font-size: 12px;"><i data-lucide="trash-2"
               class="lucide-icon"></i> Clear Display</button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Product</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>User</th>
-            </tr>
-          </thead>
-          <tbody id="recent-txn-body">
-            <tr class="skeleton-row">
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-            </tr>
-            <tr class="skeleton-row">
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-            </tr>
-            <tr class="skeleton-row">
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar tiny"></div>
-              </td>
-              <td>
-                <div class="skeleton-bar short"></div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="timeline" id="recent-txn-body">
+          <div class="timeline-empty" style="text-align:center; color:var(--slate-400); padding: 20px 0;">
+            <div class="skeleton-timeline-item"></div>
+            <div class="skeleton-timeline-item"></div>
+            <div class="skeleton-timeline-item"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- ACTIVITY TIMELINE + LOW STOCK THRESHOLD -->
-      <div class="chart-row" style="margin-bottom: 24px;">
-        <!-- ACTIVITY TIMELINE -->
-        <div class="card">
-          <h2><i data-lucide="clock" class="lucide-icon"></i> Activity Timeline</h2>
-          <div class="timeline" id="activity-timeline">
-            <div class="timeline-empty" style="text-align:center; color:var(--slate-400); padding: 20px 0;">
-              No recent activity.
-            </div>
+      <!-- LOW STOCK THRESHOLD SETTING -->
+      <div class="card admin-only" style="margin-bottom: 24px;">
+        <h2><i data-lucide="settings" class="lucide-icon"></i> Low Stock Threshold</h2>
+        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
+          Set the quantity threshold below which items are flagged as "Low Stock" across the system.
+        </p>
+
+        <!-- Low Stock Protection toggle — injected by JS at runtime -->
+        <div id="low-stock-protection-container" style="margin-bottom: 16px;"></div>
+
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="form-group" style="margin-bottom: 0; flex: 1;">
+            <label>Threshold Quantity</label>
+            <input type="number" id="low-stock-threshold" min="1" max="999" value="8" style="width: 100%;">
           </div>
+          <button class="primary-btn" id="btn-save-threshold"
+            style="width: auto; margin-top: 22px; padding: 11px 24px;"><i data-lucide="save" class="lucide-icon"></i>
+            Save</button>
         </div>
-
-        <!-- LOW STOCK THRESHOLD SETTING -->
-        <div class="card admin-only">
-          <h2><i data-lucide="settings" class="lucide-icon"></i> Low Stock Threshold</h2>
-          <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-            Set the quantity threshold below which items are flagged as "Low Stock" across the system.
-          </p>
-
-          <!-- Low Stock Protection toggle — injected by JS at runtime -->
-          <div id="low-stock-protection-container" style="margin-bottom: 16px;"></div>
-
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="form-group" style="margin-bottom: 0; flex: 1;">
-              <label>Threshold Quantity</label>
-              <input type="number" id="low-stock-threshold" min="1" max="999" value="8" style="width: 100%;">
-            </div>
-            <button class="primary-btn" id="btn-save-threshold"
-              style="width: auto; margin-top: 22px; padding: 11px 24px;"><i data-lucide="save" class="lucide-icon"></i>
-              Save</button>
-          </div>
-          <p style="font-size: 12px; color: var(--slate-400); margin-top: 10px;">
-            Current threshold: <strong id="current-threshold-display">8</strong> units
-          </p>
-        </div>
+        <p style="font-size: 12px; color: var(--slate-400); margin-top: 10px;">
+          Current threshold: <strong id="current-threshold-display">8</strong> units
+        </p>
       </div>
 
       <!-- SYSTEM TOOLS (Admin Only) -->
@@ -359,6 +277,20 @@
             </tr>
           </tbody>
         </table>
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--surface-border);">
+          <span id="export-log-page-info" style="font-size: 13px; color: var(--slate-500);">Page 1 of 1</span>
+          <div style="display: flex; gap: 8px;">
+            <button class="secondary-btn" id="export-log-prev" style="width: auto; padding: 6px 14px; font-size: 13px;"
+              disabled>
+              <i data-lucide="chevron-left" class="lucide-icon" style="width:14px;height:14px;"></i> Prev
+            </button>
+            <button class="secondary-btn" id="export-log-next" style="width: auto; padding: 6px 14px; font-size: 13px;"
+              disabled>
+              Next <i data-lucide="chevron-right" class="lucide-icon" style="width:14px;height:14px;"></i>
+            </button>
+          </div>
+        </div>
       </div>
 
     </main>

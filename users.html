@@ -65,29 +65,7 @@
     </div>
   </div>
 
-  <!-- VIEW CREDENTIALS MODAL -->
-  <div id="view-creds-modal" class="modal">
-    <div class="modal-content" style="max-width: 400px; text-align: center;">
-      <h2><i data-lucide="key-round" class="lucide-icon"></i> User Credentials</h2>
-      <p>Credentials for <strong id="vc-name"></strong>:</p>
 
-      <div
-        style="background: var(--surface-alt); border: 1px solid var(--surface-border); border-radius: var(--radius-sm); padding: 16px; margin: 20px 0; text-align: left;">
-        <div style="margin-bottom: 12px;">
-          <span
-            style="font-size: 11px; font-weight: 600; color: var(--slate-400); text-transform: uppercase;">Username</span><br>
-          <code style="font-size: 14px; color: var(--navy-800);" id="vc-username"></code>
-        </div>
-        <div>
-          <span
-            style="font-size: 11px; font-weight: 600; color: var(--slate-400); text-transform: uppercase;">Password</span><br>
-          <code style="font-size: 14px; color: var(--navy-800);" id="vc-password"></code>
-        </div>
-      </div>
-
-      <button class="primary-btn" id="vc-close" style="width: 100%;">Close</button>
-    </div>
-  </div>
 
   <!-- CONFIRM ACTION MODAL (Styled replacement for browser confirm) -->
   <div id="confirm-action-modal" class="modal">
@@ -160,19 +138,7 @@
       <h1>User Management</h1>
       <p class="page-desc">Manage user accounts and access permissions</p>
 
-      <!-- ADMIN RECOVERY INSTRUCTIONS -->
-      <div class="alert-recovery-banner">
-        <i data-lucide="terminal" class="lucide-icon"
-          style="flex-shrink: 0; margin-top: 2px;"></i>
-        <div>
-          <h4>Emergency Administrator Recovery</h4>
-          <p>If you lose your login credentials,
-            run the local recovery tool on the host server inside the <code>/server</code> directory:</p>
-          <div class="recovery-code-block">
-            node reset-admin.js &lt;username&gt; "new_password"
-          </div>
-        </div>
-      </div>
+
 
       <!-- USER SUMMARY -->
       <div class="stats-grid">
