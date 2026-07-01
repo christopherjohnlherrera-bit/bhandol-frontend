@@ -661,8 +661,8 @@ function loadDashboard() {
     }
   }
 
-  const timelineContainer = document.getElementById("recent-txn-body");
-  if (timelineContainer) {
+  const tbody = document.getElementById("recent-txn-body");
+  if (tbody) {
     // Filter out transactions cleared by the user
     const clearedAfter = localStorage.getItem("clearDashRecentAfter") || "";
     const visibleTxns = clearedAfter
@@ -670,24 +670,30 @@ function loadDashboard() {
       : txns;
     const recent = visibleTxns.slice(-10).reverse();
     if (recent.length === 0) {
-      timelineContainer.innerHTML = '<div style="text-align:center; color:var(--slate-400); padding: 20px 0;">No transactions yet.</div>';
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--slate-400); padding: 20px 0;">No transactions yet.</td></tr>';
     } else {
-      timelineContainer.innerHTML = recent.map(t => {
+      tbody.innerHTML = recent.map(t => {
         const isIn = t.type === 'Stock In';
         const dotClass = isIn ? 'stock-in' : 'stock-out';
         const iconName = isIn ? 'package-plus' : 'package-minus';
         const verb = isIn ? 'added' : 'deducted';
         return `
-          <div class="timeline-item">
-            <div class="timeline-dot ${dotClass}"><i data-lucide="${iconName}" class="lucide-icon" style="width:14px;height:14px;margin-bottom:2px;"></i></div>
-            <div class="timeline-body">
-              <strong>${t.quantity} ${t.unit} of ${t.product} ${verb}</strong>
-              <p>By ${t.user} · ${t.category}</p>
-            </div>
-            <div class="timeline-time">${t.date}<br>${t.time}</div>
-          </div>`;
+          <tr>
+            <td>${t.date}</td>
+            <td>${t.time}</td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="timeline-dot ${dotClass}" style="width: 28px; height: 28px; font-size: 11px;"><i data-lucide="${iconName}" class="lucide-icon" style="width:12px;height:12px;margin-bottom:2px;"></i></div>
+                <div style="text-align: left;">
+                  <strong style="font-size: 13.5px; color: var(--navy-800);">${t.quantity} ${t.unit} of ${t.product} ${verb}</strong>
+                  <div style="font-size: 11.5px; color: var(--slate-400); margin-top: 2px;">${t.category}</div>
+                </div>
+              </div>
+            </td>
+            <td>${t.user}</td>
+          </tr>`;
       }).join("");
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide) window.lucide.createIcons({ root: tbody });
     }
   }
 
@@ -760,8 +766,8 @@ function loadDashboard() {
       // Store the last TXN ID so on refresh, older items stay hidden
       const lastTxn = txns.length > 0 ? txns[txns.length - 1].id : "";
       if (lastTxn) localStorage.setItem("clearDashRecentAfter", lastTxn);
-      const timelineContainer = document.getElementById("recent-txn-body");
-      if (timelineContainer) timelineContainer.innerHTML = '<div style="text-align:center; color:var(--slate-400); padding: 20px 0;">No transactions yet.</div>';
+      const tbody = document.getElementById("recent-txn-body");
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--slate-400);">No transactions yet.</td></tr>';
       setText("stock-in-month", 0);
       setText("stock-out-month", 0);
       showToast('success', 'Display Cleared', 'Transaction history display has been cleared.');
@@ -2981,10 +2987,44 @@ window.closeWidgetFullscreen = function () {
 };
 
 // =============================================
+//  SIDEBAR REAL-TIME CLOCK
+// =============================================
+function initSidebarClock() {
+  const themeToggle = document.getElementById("theme-toggle");
+  if (!themeToggle) return;
+
+  const clockDiv = document.createElement("div");
+  clockDiv.className = "sidebar-clock";
+  clockDiv.id = "sidebar-clock";
+  clockDiv.innerHTML = `<i data-lucide="clock" class="lucide-icon" style="width:14px;height:14px;"></i> <span id="clock-time">--:--:-- --</span>`;
+  
+  themeToggle.parentNode.insertBefore(clockDiv, themeToggle);
+  if (window.lucide) window.lucide.createIcons({ root: clockDiv });
+
+  function updateClock() {
+    const timeSpan = document.getElementById("clock-time");
+    if (!timeSpan) return;
+    const now = new Date();
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursStr = String(hours).padStart(2, '0');
+    timeSpan.textContent = `${hoursStr}:${minutes}:${seconds} ${ampm}`;
+  }
+
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+// =============================================
 //  DOM READY — ROUTER
 // =============================================
 document.addEventListener("DOMContentLoaded", async function () {
   initTheme();
+  initSidebarClock();
 
   try {
     const safeFetch = async (url) => {

@@ -193,7 +193,7 @@
 
 
 
-      <!-- RECENT TRANSACTIONS (Timeline Style) -->
+      <!-- TRANSACTION HISTORY -->
       <div class="card" style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <h2 style="margin: 0;"><i data-lucide="clipboard-list" class="lucide-icon"></i> Transaction History</h2>
@@ -201,13 +201,21 @@
             style="width: auto; margin: 0; padding: 8px 16px; font-size: 12px;"><i data-lucide="trash-2"
               class="lucide-icon"></i> Clear Display</button>
         </div>
-        <div class="timeline" id="recent-txn-body">
-          <div class="timeline-empty" style="text-align:center; color:var(--slate-400); padding: 20px 0;">
-            <div class="skeleton-timeline-item"></div>
-            <div class="skeleton-timeline-item"></div>
-            <div class="skeleton-timeline-item"></div>
-          </div>
-        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Activity</th>
+              <th>User</th>
+            </tr>
+          </thead>
+          <tbody id="recent-txn-body">
+            <tr>
+              <td colspan="4" style="text-align:center;color:var(--slate-400);">No transactions yet.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- LOW STOCK THRESHOLD SETTING -->
