@@ -1151,6 +1151,11 @@ function openStatModal(type) {
   const tbody = document.getElementById('sdm-tbody');
   if (!modal || !title || !thead || !tbody) return;
 
+  const content = document.getElementById('sdm-content');
+  if (content) {
+    content.classList.add('stat-modal-fullscreen');
+  }
+
   const products = getProducts();
   const txns = getTransactions();
 

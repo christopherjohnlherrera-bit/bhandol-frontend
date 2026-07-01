@@ -223,6 +223,10 @@ body.dark-mode .stat-card {
   border-color: rgba(255, 255, 255, 0.04);
 }
 
+body.dark-mode .stat-card h3 {
+  color: var(--slate-300) !important;
+}
+
 
 /* ===== DARK MODE TOGGLE ===== */
 .theme-toggle {

@@ -115,18 +115,12 @@
       <div class="stats-grid">
         <div class="stat-card clickable" id="card-total-products" onclick="openStatModal('Total Products')"
           title="Click to view full report">
-          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
-            onclick="event.stopPropagation(); openWidgetFullscreen('card-total-products')"><i data-lucide="maximize"
-              class="lucide-icon" style="width:14px;height:14px;color:inherit;"></i></button>
           <div class="stat-icon"><i data-lucide="package" class="lucide-icon"></i></div>
           <h3>Total Products</h3>
           <p class="stat-number" id="total-products">—</p>
         </div>
         <div class="stat-card clickable" id="card-total-stock-qty" style="border-left: none;"
           onclick="openStatModal('Total Stock Quantity')" title="Click to view full report">
-          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
-            onclick="event.stopPropagation(); openWidgetFullscreen('card-total-stock-qty')"><i data-lucide="maximize"
-              class="lucide-icon" style="width:14px;height:14px;color:inherit;"></i></button>
           <div class="stat-icon" style="background: var(--surface-alt); color: var(--blue-600);"><i
               data-lucide="bar-chart-3" class="lucide-icon"></i></div>
           <h3>Total Stock Quantity</h3>
@@ -134,27 +128,18 @@
         </div>
         <div class="stat-card warning clickable" id="card-low-stock" onclick="openStatModal('Low Stock Items')"
           title="Click to view full report">
-          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
-            onclick="event.stopPropagation(); openWidgetFullscreen('card-low-stock')"><i data-lucide="maximize"
-              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
           <div class="stat-icon"><i data-lucide="alert-triangle" class="lucide-icon"></i></div>
           <h3>Low Stock Items</h3>
           <p class="stat-number" id="low-stock-count">—</p>
         </div>
         <div class="stat-card success clickable" id="card-stock-in" onclick="openStatModal('Stock In (This Month)')"
           title="Click to view full report">
-          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
-            onclick="event.stopPropagation(); openWidgetFullscreen('card-stock-in')"><i data-lucide="maximize"
-              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
           <div class="stat-icon"><i data-lucide="arrow-down-to-line" class="lucide-icon"></i></div>
           <h3>Stock In (This Month)</h3>
           <p class="stat-number" id="stock-in-month">—</p>
         </div>
         <div class="stat-card danger clickable" id="card-stock-out" onclick="openStatModal('Stock Out (This Month)')"
           title="Click to view full report">
-          <button class="icon-btn maximize-btn" style="position:absolute; top:8px; right:8px;" title="Focus Mode"
-            onclick="event.stopPropagation(); openWidgetFullscreen('card-stock-out')"><i data-lucide="maximize"
-              class="lucide-icon" style="width:14px;height:14px;color:rgba(255,255,255,0.7);"></i></button>
           <div class="stat-icon"><i data-lucide="arrow-up-from-line" class="lucide-icon"></i></div>
           <h3>Stock Out (This Month)</h3>
           <p class="stat-number" id="stock-out-month">—</p>
@@ -311,9 +296,6 @@
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
         <h2 id="sdm-title" style="margin:0; display:flex; align-items:center; gap:8px;">Detail View</h2>
         <div style="display:flex; gap:16px; align-items:center;">
-          <button class="icon-btn" onclick="toggleStatModalFullscreen()" title="Toggle Fullscreen"
-            style="color:var(--slate-500);"><i data-lucide="maximize" class="lucide-icon"
-              style="width:20px;height:20px;"></i></button>
           <span onclick="closeStatModal()"
             style="cursor:pointer; font-size:24px; color:var(--slate-500);">&times;</span>
         </div>
