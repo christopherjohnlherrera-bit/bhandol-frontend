@@ -201,21 +201,23 @@
             style="width: auto; margin: 0; padding: 8px 16px; font-size: 12px;"><i data-lucide="trash-2"
               class="lucide-icon"></i> Clear Display</button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Activity</th>
-              <th>User</th>
-            </tr>
-          </thead>
-          <tbody id="recent-txn-body">
-            <tr>
-              <td colspan="4" style="text-align:center;color:var(--slate-400);">No transactions yet.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Activity</th>
+                <th>User</th>
+              </tr>
+            </thead>
+            <tbody id="recent-txn-body">
+              <tr>
+                <td colspan="4" style="text-align:center;color:var(--slate-400);">No transactions yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- LOW STOCK THRESHOLD SETTING -->
