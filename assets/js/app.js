@@ -791,8 +791,9 @@ function loadDashboard() {
         const res = await fetch(`${API_URL}/export-logs`);
         const logs = await res.json();
         if (logs.length > 0) {
-          // Logs come DESC by id, so first entry has the highest ID
-          localStorage.setItem("clearExportLogAfter", String(logs[0].id));
+          // Logs come DESC by createdAt, so first entry is the most recent.
+          // Store its ISO timestamp so logs at or before this moment are hidden.
+          localStorage.setItem("clearExportLogAfter", logs[0].createdAt || "");
         }
       } catch (e) { /* still clear the UI even if fetch fails */ }
       // Reset pagination state
@@ -1466,9 +1467,11 @@ async function loadExportLogs() {
   try {
     const res = await fetch(`${API_URL}/export-logs`);
     const allLogs = await res.json();
-    // Filter out logs that were cleared by the user (ID-based)
-    const clearedAfter = parseInt(localStorage.getItem("clearExportLogAfter") || "0", 10);
-    exportLogAllLogs = clearedAfter > 0 ? allLogs.filter(l => l.id > clearedAfter) : allLogs;
+    // Filter out logs that were cleared by the user (ISO timestamp-based)
+    const clearedAfter = localStorage.getItem("clearExportLogAfter") || "";
+    exportLogAllLogs = clearedAfter
+      ? allLogs.filter(l => l.createdAt && l.createdAt > clearedAfter)
+      : allLogs;
     exportLogCurrentPage = 1;
     renderExportLogPage();
   } catch (err) {
@@ -3120,7 +3123,7 @@ window.openTxnReportModal = function (type) {
   }
 
   modal.style.display = 'flex';
-  if (window.lucide) window.lucide.createIcons({ node: modal });
+  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
   // Close on backdrop click
   modal.onclick = (e) => { if (e.target === modal) window.closeTxnReportModal(); };
 };
