@@ -81,30 +81,32 @@
         </div>
         <hr style="border:none;border-top:1px solid var(--surface-border);margin:16px 0;">
 
-        <div class="form-group">
-          <label>Your Username</label>
-          <div class="input-icon-wrapper">
-            <i data-lucide="user" class="input-icon"></i>
-            <input type="text" id="fp-username" placeholder="Enter your login username" autocomplete="username">
+        <form id="forgot-pw-form" onsubmit="submitForgotPassword(event); return false;">
+          <div class="form-group with-icon" id="fp-group-username">
+            <label for="fp-username">Your Username</label>
+            <div class="input-icon-wrapper">
+              <i data-lucide="user" class="input-icon"></i>
+              <input type="text" id="fp-username" placeholder="Enter your login username" autocomplete="username">
+            </div>
+            <span class="error-msg" id="fp-username-err"></span>
           </div>
-          <span class="error-msg" id="fp-username-err" style="display:none;"></span>
-        </div>
 
-        <div class="form-group">
-          <label>Reason / Notes <span style="color:var(--slate-400);font-weight:400;">(optional)</span></label>
-          <textarea id="fp-reason" placeholder="e.g. Forgot my PIN during my shift"
-            style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:14px;padding:10px 12px;border:1.5px solid var(--surface-border);border-radius:var(--radius-sm);background:var(--surface);color:var(--slate-700);min-height:80px;transition:border-color 0.2s;outline:none;"
-            rows="3" onfocus="this.style.borderColor='var(--blue-500)'" onblur="this.style.borderColor='var(--surface-border)'"></textarea>
-        </div>
+          <div class="form-group">
+            <label for="fp-reason">Reason / Notes <span style="color:var(--slate-400);font-weight:400;">(optional)</span></label>
+            <textarea id="fp-reason" placeholder="e.g. Forgot my PIN during my shift"
+              style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:14px;padding:10px 12px;border:1.5px solid var(--surface-border);border-radius:var(--radius-sm);background:var(--surface);color:var(--slate-700);min-height:80px;transition:border-color 0.2s;outline:none;"
+              rows="3" onfocus="this.style.borderColor='var(--blue-500)'" onblur="this.style.borderColor='var(--surface-border)'"></textarea>
+          </div>
 
-        <p id="fp-error-msg" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:9px 12px;margin-bottom:10px;"></p>
+          <p id="fp-error-msg" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:9px 12px;margin-bottom:10px;"></p>
 
-        <div class="modal-buttons" style="margin-top:16px;">
-          <button class="primary-btn" id="fp-submit-btn" onclick="submitForgotPassword()" style="flex:1;width:auto;">
-            <i data-lucide="send" class="lucide-icon"></i> Submit Request
-          </button>
-          <button class="secondary-btn" onclick="closeRecoveryModal()" style="flex:1;width:auto;">Cancel</button>
-        </div>
+          <div class="modal-buttons" style="margin-top:16px;">
+            <button type="submit" class="primary-btn" id="fp-submit-btn" style="flex:1;width:auto;">
+              <i data-lucide="send" class="lucide-icon"></i> Submit Request
+            </button>
+            <button type="button" class="secondary-btn" onclick="closeRecoveryModal()" style="flex:1;width:auto;">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -123,52 +125,54 @@
         <p style="font-size:13.5px;color:var(--slate-500);margin:0;">You are using a <strong>temporary password</strong>. Please set a new permanent password to continue.</p>
       </div>
 
-      <div class="form-group">
-        <label>Current (Temporary) Password</label>
-        <div class="input-icon-wrapper password-wrapper">
-          <i data-lucide="lock" class="input-icon"></i>
-          <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
-          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
-            <i data-lucide="eye" class="lucide-icon"></i>
-          </button>
+      <form id="must-change-form" onsubmit="submitChangePassword(event); return false;">
+        <div class="form-group with-icon" id="mcp-group-old">
+          <label for="mcp-old-password">Current (Temporary) Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-old-err"></span>
         </div>
-        <span class="error-msg" id="mcp-old-err"></span>
-      </div>
 
-      <div class="form-group">
-        <label>New Password</label>
-        <div class="input-icon-wrapper password-wrapper">
-          <i data-lucide="lock" class="input-icon"></i>
-          <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
-          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
-            <i data-lucide="eye" class="lucide-icon"></i>
-          </button>
+        <div class="form-group with-icon" id="mcp-group-new">
+          <label for="mcp-new-password">New Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-new-err"></span>
         </div>
-        <span class="error-msg" id="mcp-new-err"></span>
-      </div>
 
-      <div class="form-group">
-        <label>Confirm New Password</label>
-        <div class="input-icon-wrapper password-wrapper">
-          <i data-lucide="lock" class="input-icon"></i>
-          <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
-          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
-            <i data-lucide="eye" class="lucide-icon"></i>
-          </button>
+        <div class="form-group with-icon" id="mcp-group-confirm">
+          <label for="mcp-confirm-password">Confirm New Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-confirm-err"></span>
         </div>
-        <span class="error-msg" id="mcp-confirm-err"></span>
-      </div>
 
-      <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
+        <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
 
-      <button class="primary-btn" id="mcp-submit-btn" onclick="submitChangePassword()" style="width:100%;margin-top:4px;">
-        <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
-      </button>
+        <button type="submit" class="primary-btn" id="mcp-submit-btn" style="width:100%;margin-top:4px;">
+          <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
+        </button>
 
-      <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
-        <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
-        This dialog cannot be dismissed. A new password must be set to access the system.
-      </p>
+        <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
+          <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
+          This dialog cannot be dismissed. A new password must be set to access the system.
+        </p>
+      </form>
     </div>
   </div>
 

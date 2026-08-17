@@ -519,16 +519,20 @@ body.login-page {
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .input-icon-wrapper .input-icon {
   position: absolute;
-  left: 14px;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 18px;
   height: 18px;
   color: var(--slate-400);
   transition: color 0.3s var(--ease);
   pointer-events: none;
+  z-index: 2;
 }
 
 /* Global Form Inputs (App-wide defaults) */
@@ -545,8 +549,55 @@ body.login-page {
   transition: all 0.3s var(--ease);
 }
 
-.form-group.with-icon input {
-  padding-left: 42px;
+/* Ensure any input wrapped with an icon has left padding so text never collides */
+.input-icon-wrapper input,
+.form-group.with-icon input,
+.form-group:has(.input-icon) input {
+  padding-left: 42px !important;
+}
+
+.password-wrapper input {
+  padding-right: 42px !important;
+}
+
+/* Form Error Message Styling */
+.form-group .error-msg {
+  display: none;
+  color: var(--red-600);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.form-group.has-error .error-msg {
+  display: block;
+}
+
+.form-group.has-error input,
+.form-group.has-error select,
+.form-group.has-error textarea {
+  border-color: var(--red-600) !important;
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.form-group.has-error input:focus,
+.form-group.has-error select:focus,
+.form-group.has-error textarea:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Spinner helper */
+@keyframes spinIcon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin,
+.lucide-icon.spin,
+.lucide-icon[data-lucide="loader"],
+.lucide-icon[data-lucide="loader-circle"] {
+  animation: spinIcon 1s linear infinite;
 }
 
 .form-group input::placeholder,
@@ -3849,17 +3900,17 @@ body.dark-mode #txn-report-body .report-highlight {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--red-600);
+  background: #dc2626;
   color: #fff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  padding: 2px 8px 2px 6px;
+  padding: 2px 8px;
   border-radius: 20px;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-  margin-top: 4px;
+  width: fit-content;
 }
 .reset-req-badge:hover {
   background: #b91c1c;
@@ -3867,9 +3918,47 @@ body.dark-mode #txn-report-body .report-highlight {
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
 }
 
-/* Subtle left border on rows with a pending reset request */
-.reset-requested-row > td:first-child {
-  border-left: 3px solid var(--red-500);
+/* Clear highlight & background on rows with a pending reset request */
+.reset-requested-row,
+tr.reset-requested-row {
+  background-color: #fee2e2 !important;
+  border-left: 4px solid #ef4444 !important;
+}
+.reset-requested-row > td {
+  background-color: transparent !important;
+}
+
+/* Staff reason snippet displayed under user's name */
+.staff-reason-snippet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px dashed rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-top: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  max-width: 100%;
+  line-height: 1.3;
+}
+.staff-reason-snippet:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+}
+
+body.dark-mode .reset-requested-row,
+body.dark-mode tr.reset-requested-row {
+  background-color: rgba(239, 68, 68, 0.18) !important;
+  border-left: 4px solid #ef4444 !important;
+}
+body.dark-mode .staff-reason-snippet {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 /* ---- Temp-password display box ---- */

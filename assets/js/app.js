@@ -60,6 +60,16 @@ function getLowStockProtectionEnabled() {
   return localStorage.getItem("lowStockProtectionEnabled") === "true";
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function getUsers() { return appUsers; }
 function getProducts() { return appProducts; }
 function getTransactions() { return appTxns; }
@@ -476,19 +486,25 @@ function renderUserTable(users) {
       ? `<button class="action-icon-btn warning" onclick="adminResetUserPassword('${u.id}', '${u.username}')" title="Reset Password for ${u.username}"><i data-lucide="key-round" class="lucide-icon"></i></button>`
       : `<button class="action-icon-btn warning" disabled title="Use account settings to change your own password" style="opacity:0.5;cursor:not-allowed;"><i data-lucide="key-round" class="lucide-icon"></i></button>`;
 
-    // Reset-requested badge — clickable to reveal the submitted reason
-    const resetBadge = u.resetRequested
-      ? `<br><span class="reset-req-badge" onclick="showResetReasonById('${u.id}')" title="Click to view submitted reason">
-           <i data-lucide="alert-circle" class="lucide-icon" style="width:11px;height:11px;"></i>
-           Reset Requested
-         </span>`
+    // Reset-requested badge & reason snippet — visible only in Admin portal
+    const resetBadgeAndReason = u.resetRequested
+      ? `<div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+           <span class="reset-req-badge" onclick="showResetReasonById('${u.id}')" title="Click to view full reset details">
+             <i data-lucide="alert-circle" class="lucide-icon" style="width:12px;height:12px;"></i>
+             Reset Requested
+           </span>
+           ${u.resetReason ? `<div class="staff-reason-snippet" onclick="showResetReasonById('${u.id}')" title="Click to expand details"><i data-lucide="message-square" class="lucide-icon" style="width:11px;height:11px;flex-shrink:0;"></i> <span>Reason: &ldquo;${escapeHtml(u.resetReason)}&rdquo;</span></div>` : ''}
+         </div>`
       : '';
 
     return `
-      <tr${u.resetRequested ? ' class="reset-requested-row"' : ''}>
+      <tr class="${u.resetRequested ? 'reset-requested-row' : ''}">
         <td>${u.id}</td>
-        <td>${u.name}${resetBadge}</td>
-        <td>${u.username}</td>
+        <td>
+          <div style="font-weight: 600; color: var(--navy-800);">${escapeHtml(u.name)}</div>
+          ${resetBadgeAndReason}
+        </td>
+        <td>${escapeHtml(u.username)}</td>
         <td style="text-transform:capitalize;">${u.role}</td>
         <td><span class="status ${statusClass}">${u.status}</span></td>
         <td style="white-space:nowrap;">
@@ -843,6 +859,11 @@ function showResetReasonModal(username, reason) {
  * If the user is on the login page (index.html), the modal is already in the HTML.
  * For all other pages it is injected dynamically so we don't duplicate HTML everywhere.
  */
+/**
+ * Ensures the #must-change-modal exists in the DOM.
+ * If the user is on the login page (index.html), the modal is already in the HTML.
+ * For all other pages it is injected dynamically so we don't duplicate HTML everywhere.
+ */
 function ensureMustChangeModal() {
   if (document.getElementById('must-change-modal')) return; // Already present
 
@@ -856,47 +877,49 @@ function ensureMustChangeModal() {
           <h2 style="margin:0 0 6px;font-size:20px;">Security Update Required</h2>
           <p style="font-size:13.5px;color:var(--slate-500);margin:0;">You are using a <strong>temporary password</strong>. Please set a new permanent password to continue.</p>
         </div>
-        <div class="form-group">
-          <label>Current (Temporary) Password</label>
-          <div class="input-icon-wrapper password-wrapper">
-            <i data-lucide="lock" class="input-icon"></i>
-            <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
-            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
-              <i data-lucide="eye" class="lucide-icon"></i>
-            </button>
+        <form id="must-change-form" onsubmit="submitChangePassword(event); return false;">
+          <div class="form-group with-icon" id="mcp-group-old">
+            <label for="mcp-old-password">Current (Temporary) Password</label>
+            <div class="input-icon-wrapper password-wrapper">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
+              <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
+                <i data-lucide="eye" class="lucide-icon"></i>
+              </button>
+            </div>
+            <span class="error-msg" id="mcp-old-err"></span>
           </div>
-          <span class="error-msg" id="mcp-old-err"></span>
-        </div>
-        <div class="form-group">
-          <label>New Password</label>
-          <div class="input-icon-wrapper password-wrapper">
-            <i data-lucide="lock" class="input-icon"></i>
-            <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
-            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
-              <i data-lucide="eye" class="lucide-icon"></i>
-            </button>
+          <div class="form-group with-icon" id="mcp-group-new">
+            <label for="mcp-new-password">New Password</label>
+            <div class="input-icon-wrapper password-wrapper">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
+              <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
+                <i data-lucide="eye" class="lucide-icon"></i>
+              </button>
+            </div>
+            <span class="error-msg" id="mcp-new-err"></span>
           </div>
-          <span class="error-msg" id="mcp-new-err"></span>
-        </div>
-        <div class="form-group">
-          <label>Confirm New Password</label>
-          <div class="input-icon-wrapper password-wrapper">
-            <i data-lucide="lock" class="input-icon"></i>
-            <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
-            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
-              <i data-lucide="eye" class="lucide-icon"></i>
-            </button>
+          <div class="form-group with-icon" id="mcp-group-confirm">
+            <label for="mcp-confirm-password">Confirm New Password</label>
+            <div class="input-icon-wrapper password-wrapper">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
+              <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
+                <i data-lucide="eye" class="lucide-icon"></i>
+              </button>
+            </div>
+            <span class="error-msg" id="mcp-confirm-err"></span>
           </div>
-          <span class="error-msg" id="mcp-confirm-err"></span>
-        </div>
-        <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
-        <button class="primary-btn" id="mcp-submit-btn" onclick="submitChangePassword()" style="width:100%;margin-top:4px;">
-          <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
-        </button>
-        <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
-          <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
-          This dialog cannot be dismissed. A new password must be set to access the system.
-        </p>
+          <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
+          <button type="submit" class="primary-btn" id="mcp-submit-btn" style="width:100%;margin-top:4px;">
+            <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
+          </button>
+          <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
+            <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
+            This dialog cannot be dismissed. A new password must be set to access the system.
+          </p>
+        </form>
       </div>
     </div>`);
 }
@@ -914,7 +937,11 @@ function showMustChangeModal() {
   });
   ['mcp-old-err', 'mcp-new-err', 'mcp-confirm-err'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.textContent = '';
+    if (el) { el.textContent = ''; el.style.display = 'none'; }
+  });
+  ['mcp-group-old', 'mcp-group-new', 'mcp-group-confirm'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('has-error');
   });
   const globalErr = document.getElementById('mcp-global-err');
   if (globalErr) { globalErr.style.display = 'none'; globalErr.textContent = ''; }
@@ -926,7 +953,7 @@ function showMustChangeModal() {
 
   modal.style.display = 'flex';
   // Intentionally NO backdrop click handler — this modal must NOT be dismissible
-  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
+  if (window.lucide) window.lucide.createIcons({ root: modal });
 }
 
 /** Toggle show/hide for password fields inside the must-change modal. */
@@ -938,7 +965,7 @@ function toggleMcpField(inputId, btn) {
   btn.innerHTML = nowText
     ? '<i data-lucide="eye-off" class="lucide-icon"></i>'
     : '<i data-lucide="eye" class="lucide-icon"></i>';
-  if (window.lucide) window.lucide.createIcons({ nodes: [btn] });
+  if (window.lucide) window.lucide.createIcons({ root: btn });
 }
 
 /**
@@ -946,7 +973,13 @@ function toggleMcpField(inputId, btn) {
  * On success: clears the mustChangePassword flag and redirects (login page)
  * or closes the modal (any other page).
  */
-async function submitChangePassword() {
+async function submitChangePassword(e) {
+  if (e && typeof e.preventDefault === 'function') {
+    e.preventDefault();
+  }
+
+  console.log('[ChangePassword] Form submit triggered.');
+
   const oldPwEl   = document.getElementById('mcp-old-password');
   const newPwEl   = document.getElementById('mcp-new-password');
   const confPwEl  = document.getElementById('mcp-confirm-password');
@@ -956,83 +989,120 @@ async function submitChangePassword() {
   const globalErr = document.getElementById('mcp-global-err');
   const submitBtn = document.getElementById('mcp-submit-btn');
 
-  // Clear previous errors
-  [oldErr, newErr, confErr].forEach(el => { if (el) el.textContent = ''; });
+  const oldGrp    = document.getElementById('mcp-group-old') || oldPwEl?.closest('.form-group');
+  const newGrp    = document.getElementById('mcp-group-new') || newPwEl?.closest('.form-group');
+  const confGrp   = document.getElementById('mcp-group-confirm') || confPwEl?.closest('.form-group');
+
+  // Reset previous errors
+  [oldGrp, newGrp, confGrp].forEach(grp => { if (grp) grp.classList.remove('has-error'); });
+  [oldErr, newErr, confErr].forEach(el => { if (el) { el.textContent = ''; el.style.display = 'none'; } });
   if (globalErr) { globalErr.style.display = 'none'; globalErr.textContent = ''; }
 
-  const oldPassword     = oldPwEl  ? oldPwEl.value  : '';
-  const newPassword     = newPwEl  ? newPwEl.value  : '';
-  const confirmPassword = confPwEl ? confPwEl.value : '';
+  const oldPassword     = oldPwEl  ? oldPwEl.value.trim()  : '';
+  const newPassword     = newPwEl  ? newPwEl.value.trim()  : '';
+  const confirmPassword = confPwEl ? confPwEl.value.trim() : '';
 
   let valid = true;
-  if (!oldPassword) {
-    if (oldErr) oldErr.textContent = 'Current password is required.';
-    valid = false;
-  }
-  if (!newPassword || newPassword.length < 4) {
-    if (newErr) newErr.textContent = 'New password must be at least 4 characters.';
-    valid = false;
-  }
-  if (newPassword && newPassword !== confirmPassword) {
-    if (confErr) confErr.textContent = 'Passwords do not match.';
-    valid = false;
-  }
-  if (!valid) return;
 
-  const userId = localStorage.getItem('userId');
-  if (!userId) {
-    if (globalErr) { globalErr.textContent = 'Session error. Please log out and log in again.'; globalErr.style.display = 'block'; }
+  if (!oldPassword) {
+    if (oldErr) { oldErr.textContent = 'Current (temporary) password is required.'; oldErr.style.display = 'block'; }
+    if (oldGrp) oldGrp.classList.add('has-error');
+    valid = false;
+  }
+
+  if (!newPassword || newPassword.length < 4) {
+    if (newErr) { newErr.textContent = 'New password must be at least 4 characters long.'; newErr.style.display = 'block'; }
+    if (newGrp) newGrp.classList.add('has-error');
+    valid = false;
+  }
+
+  if (!confirmPassword) {
+    if (confErr) { confErr.textContent = 'Please confirm your new password.'; confErr.style.display = 'block'; }
+    if (confGrp) confGrp.classList.add('has-error');
+    valid = false;
+  } else if (newPassword !== confirmPassword) {
+    if (confErr) { confErr.textContent = 'Passwords do not match. Please re-enter your new password.'; confErr.style.display = 'block'; }
+    if (confGrp) confGrp.classList.add('has-error');
+    if (globalErr) { globalErr.textContent = 'Passwords do not match. Please ensure both new password fields match.'; globalErr.style.display = 'block'; }
+    valid = false;
+  }
+
+  if (oldPassword && newPassword && oldPassword === newPassword) {
+    if (newErr) { newErr.textContent = 'New password must be different from current temporary password.'; newErr.style.display = 'block'; }
+    if (newGrp) newGrp.classList.add('has-error');
+    valid = false;
+  }
+
+  if (!valid) {
+    console.warn('[ChangePassword] Validation failed:', { hasOld: !!oldPassword, hasNew: !!newPassword, passwordsMatch: newPassword === confirmPassword });
+    if (window.lucide) window.lucide.createIcons();
     return;
   }
+
+  const userId = localStorage.getItem('userId') || '';
+  const username = localStorage.getItem('displayName') || document.getElementById('username')?.value || '';
 
   // Loading state
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i data-lucide="loader-circle" class="lucide-icon"></i> Updating...';
-    if (window.lucide) window.lucide.createIcons({ nodes: [submitBtn] });
+    submitBtn.innerHTML = '<i data-lucide="loader" class="lucide-icon spin"></i> Updating Password...';
+    if (window.lucide) window.lucide.createIcons({ root: submitBtn });
   }
 
   try {
+    console.log('[ChangePassword] Sending request to backend...', { userId, username });
     const res = await fetch(`${API_URL}/auth/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, oldPassword, newPassword })
+      body: JSON.stringify({ userId, username, oldPassword, newPassword })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    console.log('[ChangePassword] Backend response:', res.status, data);
 
     if (res.ok && data.success) {
       localStorage.removeItem('mustChangePassword');
-      showToast('success', 'Password Updated', 'Your password has been changed successfully.');
+      showToast('success', 'Password Updated', 'Your password has been changed successfully! Loading system...');
+
+      const modal = document.getElementById('must-change-modal');
+      if (modal) modal.style.display = 'none';
 
       const page = window.location.pathname.split('/').pop();
       if (page === 'index.html' || page === '') {
-        // On login page — brief delay so the toast is visible before redirect
-        setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
-      } else {
-        // On any other page — just close the modal and let them continue
-        const modal = document.getElementById('must-change-modal');
-        if (modal) modal.style.display = 'none';
+        setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
       }
     } else {
-      const msg = data.error || 'Failed to update password. Please try again.';
+      const msg = data.error || data.message || 'Failed to update password. Please check your current password.';
+      
       if (msg.toLowerCase().includes('current') || msg.toLowerCase().includes('incorrect')) {
-        if (oldErr) oldErr.textContent = msg;
+        if (oldErr) { oldErr.textContent = msg; oldErr.style.display = 'block'; }
+        if (oldGrp) oldGrp.classList.add('has-error');
       } else if (msg.toLowerCase().includes('differ') || msg.toLowerCase().includes('same')) {
-        if (newErr) newErr.textContent = msg;
-      } else {
-        if (globalErr) { globalErr.textContent = msg; globalErr.style.display = 'block'; }
+        if (newErr) { newErr.textContent = msg; newErr.style.display = 'block'; }
+        if (newGrp) newGrp.classList.add('has-error');
       }
+      
+      if (globalErr) {
+        globalErr.textContent = msg;
+        globalErr.style.display = 'block';
+      }
+
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue';
+        if (window.lucide) window.lucide.createIcons({ root: submitBtn });
       }
     }
   } catch (err) {
-    if (globalErr) { globalErr.textContent = 'Connection error. Please check your network and try again.'; globalErr.style.display = 'block'; }
+    console.error('[ChangePassword] Network error:', err);
+    if (globalErr) {
+      globalErr.textContent = 'Cannot reach the server. Please check your connection and try again.';
+      globalErr.style.display = 'block';
+    }
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue';
+      if (window.lucide) window.lucide.createIcons({ root: submitBtn });
     }
   }
 }
