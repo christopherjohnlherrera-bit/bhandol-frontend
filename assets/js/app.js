@@ -238,8 +238,16 @@ async function login() {
       localStorage.setItem("userRole", data.user.role);
       localStorage.setItem("displayName", data.user.name);
       localStorage.setItem("userId", data.user.id);
-      window.location.href = "dashboard.html";
-      // We don't restore the button here because the page is redirecting
+      if (data.user.mustChangePassword) {
+        // Do NOT redirect yet — force the user to change their password first
+        localStorage.setItem("mustChangePassword", "true");
+        restoreLoginBtn(btn, originalText);
+        showMustChangeModal();
+      } else {
+        localStorage.removeItem("mustChangePassword");
+        window.location.href = "dashboard.html";
+        // We don't restore the button here because the page is redirecting
+      }
     } else {
       triggerLoginError();
       restoreLoginBtn(btn, originalText);
@@ -295,20 +303,39 @@ function setupPasswordToggle() {
   }
 }
 
-// Account Recovery Modal
+// =============================================
+//  ACCOUNT RECOVERY / FORGOT PASSWORD MODAL
+// =============================================
 function showRecoveryModal(e) {
   if (e) e.preventDefault();
-  const modal = document.getElementById("recovery-modal");
-  if (modal) {
-    modal.style.display = "flex";
+  const modal = document.getElementById('recovery-modal');
+  if (!modal) return;
+
+  // Reset the form to a clean state every time the modal opens
+  const formWrap   = document.getElementById('forgot-pw-form-wrap');
+  const successDiv = document.getElementById('forgot-pw-success');
+  const unameInput = document.getElementById('fp-username');
+  const reasonEl   = document.getElementById('fp-reason');
+  const errMsg     = document.getElementById('fp-error-msg');
+  const submitBtn  = document.getElementById('fp-submit-btn');
+
+  if (formWrap)   formWrap.style.display   = '';
+  if (successDiv) successDiv.style.display = 'none';
+  if (unameInput) unameInput.value  = '';
+  if (reasonEl)   reasonEl.value   = '';
+  if (errMsg)   { errMsg.style.display = 'none'; errMsg.textContent = ''; }
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i data-lucide="send" class="lucide-icon"></i> Submit Request';
   }
+
+  modal.style.display = 'flex';
+  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
 }
 
 function closeRecoveryModal() {
-  const modal = document.getElementById("recovery-modal");
-  if (modal) {
-    modal.style.display = "none";
-  }
+  const modal = document.getElementById('recovery-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 // Skeleton loading row generator
@@ -348,6 +375,7 @@ function logout() {
   localStorage.removeItem("userRole");
   localStorage.removeItem("displayName");
   localStorage.removeItem("userId");
+  localStorage.removeItem("mustChangePassword"); // Clear forced change flag on logout
   sessionStorage.removeItem("welcomeShown");
   window.location.href = "index.html";
 }
@@ -384,6 +412,13 @@ function requireAuth() {
 
   if (page === "users.html" && userRole !== "admin") {
     window.location.href = "dashboard.html";
+    return;
+  }
+
+  // On any protected page: if the user has a mustChangePassword flag set,
+  // show the forced change modal so they cannot bypass it.
+  if (!publicPages.includes(page) && localStorage.getItem("mustChangePassword") === "true") {
+    requestAnimationFrame(() => showMustChangeModal());
   }
 }
 
@@ -424,24 +459,40 @@ function renderUserTable(users) {
 
   tbody.innerHTML = users.map(u => {
     const statusClass = u.status === "Active" ? "in" : "out";
+
+    // Delete button — disabled for self to prevent lockout
     const deleteBtn = u.id !== currentUserId
       ? `<button class="action-icon-btn danger" onclick="deleteUser('${u.id}')" title="Delete User"><i data-lucide="trash-2" class="lucide-icon"></i></button>`
-      : `<button class="action-icon-btn danger" disabled title="Cannot delete yourself" style="opacity: 0.5; cursor: not-allowed;"><i data-lucide="trash-2" class="lucide-icon"></i></button>`;
+      : `<button class="action-icon-btn danger" disabled title="Cannot delete yourself" style="opacity:0.5;cursor:not-allowed;"><i data-lucide="trash-2" class="lucide-icon"></i></button>`;
 
-    const toggleIcon = u.status === "Active" ? "lock" : "unlock";
+    const toggleIcon  = u.status === "Active" ? "lock" : "unlock";
     const toggleTitle = u.status === "Active" ? "Deactivate User" : "Activate User";
-    const toggleBtn = u.id !== currentUserId
+    const toggleBtn   = u.id !== currentUserId
       ? `<button class="action-icon-btn" onclick="toggleUserStatus('${u.id}')" title="${toggleTitle}"><i data-lucide="${toggleIcon}" class="lucide-icon"></i></button>`
-      : `<button class="action-icon-btn" disabled title="Cannot change own status" style="opacity: 0.5; cursor: not-allowed;"><i data-lucide="${toggleIcon}" class="lucide-icon"></i></button>`;
+      : `<button class="action-icon-btn" disabled title="Cannot change own status" style="opacity:0.5;cursor:not-allowed;"><i data-lucide="${toggleIcon}" class="lucide-icon"></i></button>`;
+
+    // Reset password button — admin cannot reset their own via this route
+    const resetPwBtn = u.id !== currentUserId
+      ? `<button class="action-icon-btn warning" onclick="adminResetUserPassword('${u.id}', '${u.username}')" title="Reset Password for ${u.username}"><i data-lucide="key-round" class="lucide-icon"></i></button>`
+      : `<button class="action-icon-btn warning" disabled title="Use account settings to change your own password" style="opacity:0.5;cursor:not-allowed;"><i data-lucide="key-round" class="lucide-icon"></i></button>`;
+
+    // Reset-requested badge — clickable to reveal the submitted reason
+    const resetBadge = u.resetRequested
+      ? `<br><span class="reset-req-badge" onclick="showResetReasonById('${u.id}')" title="Click to view submitted reason">
+           <i data-lucide="alert-circle" class="lucide-icon" style="width:11px;height:11px;"></i>
+           Reset Requested
+         </span>`
+      : '';
 
     return `
-      <tr>
+      <tr${u.resetRequested ? ' class="reset-requested-row"' : ''}>
         <td>${u.id}</td>
-        <td>${u.name}</td>
+        <td>${u.name}${resetBadge}</td>
         <td>${u.username}</td>
-        <td style="text-transform: capitalize;">${u.role}</td>
+        <td style="text-transform:capitalize;">${u.role}</td>
         <td><span class="status ${statusClass}">${u.status}</span></td>
-        <td style="white-space: nowrap;">
+        <td style="white-space:nowrap;">
+          ${resetPwBtn}
           ${toggleBtn}
           ${deleteBtn}
         </td>
@@ -597,8 +648,398 @@ function viewCredentials(id) {
 }
 
 
+
+// =============================================
+//  FORGOT PASSWORD REQUEST (Staff → Admin)
+// =============================================
+
+/**
+ * Called when staff submits the Forgot Password form on the login screen.
+ * Sends a reset request to the backend which flags the user for the Admin.
+ */
+async function submitForgotPassword() {
+  const usernameEl = document.getElementById('fp-username');
+  const reasonEl   = document.getElementById('fp-reason');
+  const errMsg     = document.getElementById('fp-error-msg');
+  const submitBtn  = document.getElementById('fp-submit-btn');
+  const formWrap   = document.getElementById('forgot-pw-form-wrap');
+  const successDiv = document.getElementById('forgot-pw-success');
+
+  const username = usernameEl ? usernameEl.value.trim() : '';
+  const reason   = reasonEl   ? reasonEl.value.trim()   : '';
+
+  // Clear previous error
+  if (errMsg) { errMsg.style.display = 'none'; errMsg.textContent = ''; }
+
+  if (!username) {
+    if (errMsg) { errMsg.textContent = 'Please enter your username.'; errMsg.style.display = 'block'; }
+    if (usernameEl) usernameEl.focus();
+    return;
+  }
+
+  // Loading state
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i data-lucide="loader-circle" class="lucide-icon"></i> Submitting...';
+    if (window.lucide) window.lucide.createIcons({ nodes: [submitBtn] });
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, reason })
+    });
+
+    // Always show success (backend uses generic response to prevent enumeration)
+    if (res.ok) {
+      if (formWrap)   formWrap.style.display   = 'none';
+      if (successDiv) {
+        successDiv.style.display = 'block';
+        if (window.lucide) window.lucide.createIcons({ nodes: [successDiv] });
+      }
+    } else {
+      const data = await res.json().catch(() => ({}));
+      const msg = data.error || 'Failed to submit request. Please try again.';
+      if (errMsg) { errMsg.textContent = msg; errMsg.style.display = 'block'; }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i data-lucide="send" class="lucide-icon"></i> Submit Request';
+      }
+    }
+  } catch (e) {
+    if (errMsg) { errMsg.textContent = 'Cannot connect to server. Please try again later.'; errMsg.style.display = 'block'; }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i data-lucide="send" class="lucide-icon"></i> Submit Request';
+    }
+  }
+}
+
+// =============================================
+//  ADMIN — RESET USER PASSWORD
+// =============================================
+
+/**
+ * Called when an Admin clicks the "Reset Password" (key) button in the user table.
+ * Prompts for confirmation, calls the API, and displays the generated temp password.
+ */
+async function adminResetUserPassword(userId, username) {
+  showConfirmModal(
+    'Reset Password',
+    `Generate a temporary password for "${username}"? They will be required to set a new password on their next login.`,
+    async () => {
+      const requesterId = localStorage.getItem('userId');
+      try {
+        const res = await fetch(`${API_URL}/admin/users/${userId}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requesterId })
+        });
+        const data = await res.json();
+        if (res.ok && data.temporaryPassword) {
+          showTempPasswordModal(username, data.temporaryPassword);
+          // Optimistically update the local cache so the badge clears immediately
+          const u = appUsers.find(u => u.id === userId);
+          if (u) { u.resetRequested = false; u.resetReason = ''; u.mustChangePassword = true; }
+        } else {
+          showToast('error', 'Reset Failed', data.error || 'Failed to reset password.');
+        }
+      } catch (err) {
+        showToast('error', 'API Error', 'Failed to reset password. Check your connection.');
+      }
+    }
+  );
+}
+
+/** Display the generated temp password in the dedicated modal. */
+function showTempPasswordModal(username, tempPassword) {
+  const modal    = document.getElementById('temp-password-modal');
+  const label    = document.getElementById('tp-username-label');
+  const display  = document.getElementById('tp-password-display');
+  const copyBtn  = document.getElementById('tp-copy-btn');
+
+  if (!modal) return;
+  if (label)   label.textContent   = username;
+  if (display) display.textContent = tempPassword;
+
+  // Reset copy button to default state
+  if (copyBtn) {
+    copyBtn.classList.remove('copied');
+    copyBtn.innerHTML = '<i data-lucide="clipboard" class="lucide-icon"></i> Copy to Clipboard';
+  }
+
+  modal.style.display = 'flex';
+  modal.onclick = (e) => { if (e.target === modal) closeTempPasswordModal(); };
+  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
+}
+
+function closeTempPasswordModal() {
+  const modal = document.getElementById('temp-password-modal');
+  if (modal) modal.style.display = 'none';
+  loadUsers(); // Refresh table to clear the Reset Requested badge
+}
+
+/** Copy the displayed temp password to the clipboard. */
+function copyTempPassword() {
+  const display = document.getElementById('tp-password-display');
+  const copyBtn = document.getElementById('tp-copy-btn');
+  if (!display) return;
+
+  navigator.clipboard.writeText(display.textContent || '').then(() => {
+    if (copyBtn) {
+      copyBtn.classList.add('copied');
+      copyBtn.innerHTML = '<i data-lucide="check" class="lucide-icon"></i> Copied!';
+      if (window.lucide) window.lucide.createIcons({ nodes: [copyBtn] });
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        copyBtn.innerHTML = '<i data-lucide="clipboard" class="lucide-icon"></i> Copy to Clipboard';
+        if (window.lucide) window.lucide.createIcons({ nodes: [copyBtn] });
+      }, 2500);
+    }
+    showToast('success', 'Copied!', 'Temporary password copied to clipboard.');
+  }).catch(() => {
+    showToast('warning', 'Copy Failed', 'Please manually select and copy the password above.');
+  });
+}
+
+// =============================================
+//  RESET REASON VIEWER
+// =============================================
+
+/** Look up a user by their ID and show their reset reason. */
+function showResetReasonById(userId) {
+  const user = getUsers().find(u => u.id === userId);
+  if (!user) return;
+  showResetReasonModal(user.username, user.resetReason);
+}
+
+/** Show the Reset Reason modal with the employee's submitted reason text. */
+function showResetReasonModal(username, reason) {
+  const modal      = document.getElementById('reset-reason-modal');
+  const unameEl    = document.getElementById('rr-username');
+  const reasonEl   = document.getElementById('rr-reason');
+
+  if (!modal) {
+    // Graceful fallback if modal is somehow absent
+    alert(`Reset request from "${username}":\n\n${reason || 'No reason provided.'}`);
+    return;
+  }
+
+  if (unameEl) unameEl.textContent = username;
+  if (reasonEl) reasonEl.textContent = reason ? reason.trim() : 'No reason provided.';
+
+  modal.style.display = 'flex';
+  modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
+}
+
+// =============================================
+//  FORCED CHANGE PASSWORD (mustChangePassword flow)
+// =============================================
+
+/**
+ * Ensures the #must-change-modal exists in the DOM.
+ * If the user is on the login page (index.html), the modal is already in the HTML.
+ * For all other pages it is injected dynamically so we don't duplicate HTML everywhere.
+ */
+function ensureMustChangeModal() {
+  if (document.getElementById('must-change-modal')) return; // Already present
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="must-change-modal" class="modal must-change-overlay" style="display:none;">
+      <div class="modal-content" style="max-width:460px;text-align:left;">
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="width:68px;height:68px;background:rgba(245,158,11,0.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+            <i data-lucide="shield-alert" class="lucide-icon" style="width:34px;height:34px;color:var(--amber-600);"></i>
+          </div>
+          <h2 style="margin:0 0 6px;font-size:20px;">Security Update Required</h2>
+          <p style="font-size:13.5px;color:var(--slate-500);margin:0;">You are using a <strong>temporary password</strong>. Please set a new permanent password to continue.</p>
+        </div>
+        <div class="form-group">
+          <label>Current (Temporary) Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-old-err"></span>
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-new-err"></span>
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <div class="input-icon-wrapper password-wrapper">
+            <i data-lucide="lock" class="input-icon"></i>
+            <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
+            <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
+              <i data-lucide="eye" class="lucide-icon"></i>
+            </button>
+          </div>
+          <span class="error-msg" id="mcp-confirm-err"></span>
+        </div>
+        <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
+        <button class="primary-btn" id="mcp-submit-btn" onclick="submitChangePassword()" style="width:100%;margin-top:4px;">
+          <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
+        </button>
+        <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
+          <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
+          This dialog cannot be dismissed. A new password must be set to access the system.
+        </p>
+      </div>
+    </div>`);
+}
+
+/** Show the forced change password modal. Always unclosable — no backdrop click, no X. */
+function showMustChangeModal() {
+  ensureMustChangeModal();
+  const modal = document.getElementById('must-change-modal');
+  if (!modal) return;
+
+  // Clear any previous field values and errors
+  ['mcp-old-password', 'mcp-new-password', 'mcp-confirm-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['mcp-old-err', 'mcp-new-err', 'mcp-confirm-err'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
+  const globalErr = document.getElementById('mcp-global-err');
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.textContent = ''; }
+  const submitBtn = document.getElementById('mcp-submit-btn');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue';
+  }
+
+  modal.style.display = 'flex';
+  // Intentionally NO backdrop click handler — this modal must NOT be dismissible
+  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
+}
+
+/** Toggle show/hide for password fields inside the must-change modal. */
+function toggleMcpField(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const nowText = input.type === 'password';
+  input.type = nowText ? 'text' : 'password';
+  btn.innerHTML = nowText
+    ? '<i data-lucide="eye-off" class="lucide-icon"></i>'
+    : '<i data-lucide="eye" class="lucide-icon"></i>';
+  if (window.lucide) window.lucide.createIcons({ nodes: [btn] });
+}
+
+/**
+ * Submits the new password to /api/auth/change-password.
+ * On success: clears the mustChangePassword flag and redirects (login page)
+ * or closes the modal (any other page).
+ */
+async function submitChangePassword() {
+  const oldPwEl   = document.getElementById('mcp-old-password');
+  const newPwEl   = document.getElementById('mcp-new-password');
+  const confPwEl  = document.getElementById('mcp-confirm-password');
+  const oldErr    = document.getElementById('mcp-old-err');
+  const newErr    = document.getElementById('mcp-new-err');
+  const confErr   = document.getElementById('mcp-confirm-err');
+  const globalErr = document.getElementById('mcp-global-err');
+  const submitBtn = document.getElementById('mcp-submit-btn');
+
+  // Clear previous errors
+  [oldErr, newErr, confErr].forEach(el => { if (el) el.textContent = ''; });
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.textContent = ''; }
+
+  const oldPassword     = oldPwEl  ? oldPwEl.value  : '';
+  const newPassword     = newPwEl  ? newPwEl.value  : '';
+  const confirmPassword = confPwEl ? confPwEl.value : '';
+
+  let valid = true;
+  if (!oldPassword) {
+    if (oldErr) oldErr.textContent = 'Current password is required.';
+    valid = false;
+  }
+  if (!newPassword || newPassword.length < 4) {
+    if (newErr) newErr.textContent = 'New password must be at least 4 characters.';
+    valid = false;
+  }
+  if (newPassword && newPassword !== confirmPassword) {
+    if (confErr) confErr.textContent = 'Passwords do not match.';
+    valid = false;
+  }
+  if (!valid) return;
+
+  const userId = localStorage.getItem('userId');
+  if (!userId) {
+    if (globalErr) { globalErr.textContent = 'Session error. Please log out and log in again.'; globalErr.style.display = 'block'; }
+    return;
+  }
+
+  // Loading state
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i data-lucide="loader-circle" class="lucide-icon"></i> Updating...';
+    if (window.lucide) window.lucide.createIcons({ nodes: [submitBtn] });
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, oldPassword, newPassword })
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      localStorage.removeItem('mustChangePassword');
+      showToast('success', 'Password Updated', 'Your password has been changed successfully.');
+
+      const page = window.location.pathname.split('/').pop();
+      if (page === 'index.html' || page === '') {
+        // On login page — brief delay so the toast is visible before redirect
+        setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
+      } else {
+        // On any other page — just close the modal and let them continue
+        const modal = document.getElementById('must-change-modal');
+        if (modal) modal.style.display = 'none';
+      }
+    } else {
+      const msg = data.error || 'Failed to update password. Please try again.';
+      if (msg.toLowerCase().includes('current') || msg.toLowerCase().includes('incorrect')) {
+        if (oldErr) oldErr.textContent = msg;
+      } else if (msg.toLowerCase().includes('differ') || msg.toLowerCase().includes('same')) {
+        if (newErr) newErr.textContent = msg;
+      } else {
+        if (globalErr) { globalErr.textContent = msg; globalErr.style.display = 'block'; }
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue';
+      }
+    }
+  } catch (err) {
+    if (globalErr) { globalErr.textContent = 'Connection error. Please check your network and try again.'; globalErr.style.display = 'block'; }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue';
+    }
+  }
+}
+
 // =============================================
 //  DASHBOARD
+
 // =============================================
 function loadDashboard() {
   const products = getProducts();

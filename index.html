@@ -52,37 +52,131 @@
     </div>
   </div>
 
-  <!-- Recovery Modal -->
+  <!-- FORGOT PASSWORD REQUEST MODAL -->
   <div id="recovery-modal" class="modal" style="display: none;">
-    <div class="modal-content" style="width: 500px; text-align: left;">
-      <i data-lucide="x" id="close-modal" onclick="closeRecoveryModal()"></i>
-      <h2 id="modal-title">Account Recovery</h2>
+    <div class="modal-content" style="max-width: 480px; text-align: left;">
 
-      <div class="recovery-instructions">
-        <h3><i data-lucide="shield-alert" class="lucide-icon text-amber"></i> Security Notice</h3>
-        <p style="margin-bottom: 15px; font-size: 14px; color: var(--slate-600);">For security purposes, automated email
-          resets are disabled on this terminal.</p>
+      <!-- Success state — shown after successful submission -->
+      <div id="forgot-pw-success" style="display:none; text-align:center; padding: 8px 0 16px;">
+        <div style="width:72px;height:72px;background:rgba(34,197,94,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <i data-lucide="check-circle-2" class="lucide-icon" style="width:36px;height:36px;color:var(--green-500);"></i>
+        </div>
+        <h2 style="margin:0 0 10px; font-size:20px;">Request Submitted!</h2>
+        <p style="font-size:14px;color:var(--slate-500);margin:0 0 20px;line-height:1.6;">
+          Your request has been flagged for the <strong>Store Admin</strong>. Please wait for them to provide your temporary password in person.
+        </p>
+        <button class="secondary-btn" onclick="closeRecoveryModal()" style="width:100%;">Close</button>
+      </div>
 
-        <div class="recovery-step">
-          <h4>Staff Members:</h4>
-          <p>Please contact the system <strong>Administrator</strong> to have your password manually reset from the
-            dashboard.</p>
+      <!-- Form state — shown by default -->
+      <div id="forgot-pw-form-wrap">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+          <div style="width:44px;height:44px;background:rgba(59,130,246,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i data-lucide="key-round" class="lucide-icon" style="width:22px;height:22px;color:var(--blue-600);"></i>
+          </div>
+          <div>
+            <h2 style="margin:0;font-size:19px;">Forgot Password?</h2>
+            <p style="margin:2px 0 0;font-size:13px;color:var(--slate-500);">Submit a reset request to your Admin.</p>
+          </div>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--surface-border);margin:16px 0;">
+
+        <div class="form-group">
+          <label>Your Username</label>
+          <div class="input-icon-wrapper">
+            <i data-lucide="user" class="input-icon"></i>
+            <input type="text" id="fp-username" placeholder="Enter your login username" autocomplete="username">
+          </div>
+          <span class="error-msg" id="fp-username-err" style="display:none;"></span>
+        </div>
+
+        <div class="form-group">
+          <label>Reason / Notes <span style="color:var(--slate-400);font-weight:400;">(optional)</span></label>
+          <textarea id="fp-reason" placeholder="e.g. Forgot my PIN during my shift"
+            style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:14px;padding:10px 12px;border:1.5px solid var(--surface-border);border-radius:var(--radius-sm);background:var(--surface);color:var(--slate-700);min-height:80px;transition:border-color 0.2s;outline:none;"
+            rows="3" onfocus="this.style.borderColor='var(--blue-500)'" onblur="this.style.borderColor='var(--surface-border)'"></textarea>
+        </div>
+
+        <p id="fp-error-msg" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:9px 12px;margin-bottom:10px;"></p>
+
+        <div class="modal-buttons" style="margin-top:16px;">
+          <button class="primary-btn" id="fp-submit-btn" onclick="submitForgotPassword()" style="flex:1;width:auto;">
+            <i data-lucide="send" class="lucide-icon"></i> Submit Request
+          </button>
+          <button class="secondary-btn" onclick="closeRecoveryModal()" style="flex:1;width:auto;">Cancel</button>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div class="modal-buttons" style="margin-top: 24px;">
-        <button class="secondary-btn" onclick="closeRecoveryModal()" style="width: 100%;">Understood</button>
+  <!-- FORCED CHANGE PASSWORD MODAL
+       Shown immediately after login if mustChangePassword === true.
+       This modal is intentionally unclosable — no X, no backdrop dismiss. -->
+  <div id="must-change-modal" class="modal must-change-overlay" style="display:none;">
+    <div class="modal-content" style="max-width:460px;text-align:left;">
+
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="width:68px;height:68px;background:rgba(245,158,11,0.12);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+          <i data-lucide="shield-alert" class="lucide-icon" style="width:34px;height:34px;color:var(--amber-600);"></i>
+        </div>
+        <h2 style="margin:0 0 6px;font-size:20px;">Security Update Required</h2>
+        <p style="font-size:13.5px;color:var(--slate-500);margin:0;">You are using a <strong>temporary password</strong>. Please set a new permanent password to continue.</p>
       </div>
+
+      <div class="form-group">
+        <label>Current (Temporary) Password</label>
+        <div class="input-icon-wrapper password-wrapper">
+          <i data-lucide="lock" class="input-icon"></i>
+          <input type="password" id="mcp-old-password" placeholder="Enter the temporary password" autocomplete="current-password">
+          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-old-password', this)" title="Show/Hide">
+            <i data-lucide="eye" class="lucide-icon"></i>
+          </button>
+        </div>
+        <span class="error-msg" id="mcp-old-err"></span>
+      </div>
+
+      <div class="form-group">
+        <label>New Password</label>
+        <div class="input-icon-wrapper password-wrapper">
+          <i data-lucide="lock" class="input-icon"></i>
+          <input type="password" id="mcp-new-password" placeholder="At least 4 characters" autocomplete="new-password">
+          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-new-password', this)" title="Show/Hide">
+            <i data-lucide="eye" class="lucide-icon"></i>
+          </button>
+        </div>
+        <span class="error-msg" id="mcp-new-err"></span>
+      </div>
+
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <div class="input-icon-wrapper password-wrapper">
+          <i data-lucide="lock" class="input-icon"></i>
+          <input type="password" id="mcp-confirm-password" placeholder="Re-enter new password" autocomplete="new-password">
+          <button type="button" class="toggle-password" onclick="toggleMcpField('mcp-confirm-password', this)" title="Show/Hide">
+            <i data-lucide="eye" class="lucide-icon"></i>
+          </button>
+        </div>
+        <span class="error-msg" id="mcp-confirm-err"></span>
+      </div>
+
+      <p id="mcp-global-err" style="display:none;color:var(--red-600);font-size:13px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;"></p>
+
+      <button class="primary-btn" id="mcp-submit-btn" onclick="submitChangePassword()" style="width:100%;margin-top:4px;">
+        <i data-lucide="shield-check" class="lucide-icon"></i> Set New Password &amp; Continue
+      </button>
+
+      <p style="font-size:12px;color:var(--slate-400);text-align:center;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px;">
+        <i data-lucide="info" class="lucide-icon" style="width:13px;height:13px;flex-shrink:0;"></i>
+        This dialog cannot be dismissed. A new password must be set to access the system.
+      </p>
     </div>
   </div>
 
   <script src="assets/js/app.js"></script>
   <script>
-    // Initialize icons just for the login page specifically
-    if (window.lucide) {
-      lucide.createIcons();
-    }
+    if (window.lucide) lucide.createIcons();
   </script>
+
 </body>
 
 </html>
