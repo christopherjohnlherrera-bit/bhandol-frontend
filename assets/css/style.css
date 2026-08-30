@@ -4052,4 +4052,52 @@ body.dark-mode .temp-password-box:hover {
 }
 body.dark-mode .forgot-password {
   color: var(--blue-400, #60a5fa);
-}
+}
+/* =============================================
+   BRANCH SWITCHER (multi-branch context bar)
+   ============================================= */
+.branch-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 20px;
+  padding: 8px 14px;
+  background: var(--surface-alt, #f1f5f9);
+  border: 1px solid var(--surface-border, #e2e8f0);
+  border-radius: 10px;
+}
+.branch-switch__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--slate-500, #64748b);
+}
+.branch-switch__label .lucide-icon { width: 15px; height: 15px; }
+.branch-switch__select {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy-800, #1e293b);
+  background: var(--surface, #fff);
+  border: 1.5px solid var(--surface-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .2s;
+}
+.branch-switch__select:focus { border-color: var(--blue-500, #3b82f6); }
+.branch-switch__pill {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--blue-700, #1d4ed8);
+  background: rgba(59,130,246,0.10);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+body.dark-mode .branch-switch { background: rgba(148,163,184,0.08); }
+body.dark-mode .branch-switch__select { background: var(--surface, #1e293b); color: #e2e8f0; }

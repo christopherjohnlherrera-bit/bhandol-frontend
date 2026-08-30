@@ -13,9 +13,63 @@ let currentFilteredTxns = null;
 // separate Render URLs, so in production we must call the backend's full URL.
 // 👉 After deploying the backend, paste its Render URL here (no trailing slash).
 const PROD_BACKEND = "https://bhandol-backend.onrender.com";
+// Where the backend runs during local development. This is a FULL URL (with the
+// backend's own port) so it works even when the frontend is served separately —
+// e.g. VS Code Live Server on :5500 — instead of by the backend itself.
+const LOCAL_BACKEND = "http://localhost:3000";
 const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname);
-// Local dev still works if you run the backend on localhost (it serves /api).
-const API_URL = isLocalHost ? "/api" : `${PROD_BACKEND}/api`;
+const API_URL = isLocalHost ? `${LOCAL_BACKEND}/api` : `${PROD_BACKEND}/api`;
+
+// ── Branch / auth state ──────────────────────────────────────────
+let appBranches = [];
+
+function getAuthToken()   { return localStorage.getItem("authToken"); }
+function getUserRole()    { return localStorage.getItem("userRole"); }
+function getMyBranchId()  { return localStorage.getItem("branchId") || null; }
+// The branch an admin is currently viewing: "all" | <branchId>. Staff ignore this.
+function getAdminBranch() { return localStorage.getItem("adminBranch") || "all"; }
+function setAdminBranch(v){ localStorage.setItem("adminBranch", v || "all"); }
+
+function branchName(id) {
+  if (!id) return "All Branches";
+  const b = appBranches.find(x => x.id === id);
+  return b ? b.name : id;
+}
+
+// The branch query string appended to admin GETs so the server returns the
+// right slice. Staff send nothing — the server forces their branch from the token.
+function branchQuery() {
+  if (getUserRole() !== "admin") return "";
+  const sel = getAdminBranch();
+  return (!sel || sel === "all") ? "?branch=all" : `?branch=${encodeURIComponent(sel)}`;
+}
+
+// The branchId a WRITE should target. Staff: null (server forces their branch).
+// Admin: whichever branch they're currently viewing (must be a real branch, not "all").
+function writeBranchId() {
+  if (getUserRole() !== "admin") return undefined;      // server derives from token
+  const sel = getAdminBranch();
+  return (!sel || sel === "all") ? undefined : sel;
+}
+
+// ── Authenticated fetch ──────────────────────────────────────────
+// Wrap the global fetch so every call to our backend carries the signed token.
+// This is what lets the server trust the caller's role + branch on each request.
+(function () {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = function (input, init = {}) {
+    const url = (typeof input === "string") ? input : (input && input.url) || "";
+    const isApi = url.startsWith(API_URL) || url.startsWith(`${PROD_BACKEND}/api`) || url.startsWith("/api");
+    if (isApi) {
+      const token = getAuthToken();
+      if (token) {
+        init = { ...init };
+        init.headers = { ...(init.headers || {}), Authorization: `Bearer ${token}` };
+      }
+    }
+    return _fetch(input, init);
+  };
+})();
 
 // ===== CATEGORY COLOR SYSTEM =====
 const CATEGORY_COLORS = [
@@ -245,9 +299,17 @@ async function login() {
 
     if (res.ok) {
       const data = await res.json();
+      // Signed token — required on every subsequent API request.
+      if (data.token) localStorage.setItem("authToken", data.token);
       localStorage.setItem("userRole", data.user.role);
       localStorage.setItem("displayName", data.user.name);
       localStorage.setItem("userId", data.user.id);
+      // Branch context. Staff are pinned to their branch; admins start on "all".
+      if (data.user.branchId) localStorage.setItem("branchId", data.user.branchId);
+      else localStorage.removeItem("branchId");
+      if (data.user.branchName) localStorage.setItem("branchName", data.user.branchName);
+      else localStorage.removeItem("branchName");
+      setAdminBranch("all");
       if (data.user.mustChangePassword) {
         // Do NOT redirect yet — force the user to change their password first
         localStorage.setItem("mustChangePassword", "true");
@@ -382,9 +444,13 @@ function showConfirmModal(title, message, onConfirm) {
 }
 
 function logout() {
+  localStorage.removeItem("authToken");
   localStorage.removeItem("userRole");
   localStorage.removeItem("displayName");
   localStorage.removeItem("userId");
+  localStorage.removeItem("branchId");
+  localStorage.removeItem("branchName");
+  localStorage.removeItem("adminBranch");
   localStorage.removeItem("mustChangePassword"); // Clear forced change flag on logout
   sessionStorage.removeItem("welcomeShown");
   window.location.href = "index.html";
@@ -415,7 +481,9 @@ function requireAuth() {
   const publicPages = ["index.html", ""];
   const userRole = localStorage.getItem("userRole");
 
-  if (!publicPages.includes(page) && !userRole) {
+  // A signed token is now required to reach any protected page. Missing token
+  // (e.g. a stale pre-upgrade session) forces a fresh login.
+  if (!publicPages.includes(page) && (!userRole || !getAuthToken())) {
     window.location.href = "index.html";
     return;
   }
@@ -430,6 +498,42 @@ function requireAuth() {
   if (!publicPages.includes(page) && localStorage.getItem("mustChangePassword") === "true") {
     requestAnimationFrame(() => showMustChangeModal());
   }
+}
+
+// Render the branch context UI: an interactive switcher for admins, a fixed
+// label for staff. Mounts into #branch-switch-bar (present on the dashboard).
+function renderBranchContext() {
+  const bar = document.getElementById("branch-switch-bar");
+  if (!bar) return;
+  const role = getUserRole();
+
+  if (role === "admin") {
+    const sel = getAdminBranch();
+    const opts = [`<option value="all">Consolidated (All Branches)</option>`]
+      .concat(appBranches.map(b =>
+        `<option value="${b.id}" ${b.id === sel ? "selected" : ""}>${escapeHtml(b.name)} Branch Summary</option>`
+      )).join("");
+    bar.innerHTML = `
+      <div class="branch-switch">
+        <span class="branch-switch__label"><i data-lucide="git-branch" class="lucide-icon"></i> Viewing</span>
+        <select id="branch-select" class="branch-switch__select" onchange="onBranchSwitch(this.value)">${opts}</select>
+      </div>`;
+  } else if (role === "staff") {
+    const label = localStorage.getItem("branchName") || branchName(getMyBranchId());
+    bar.innerHTML = `
+      <div class="branch-switch branch-switch--fixed">
+        <span class="branch-switch__label"><i data-lucide="map-pin" class="lucide-icon"></i> Branch</span>
+        <span class="branch-switch__pill">${escapeHtml(label)}</span>
+      </div>`;
+  }
+  if (window.lucide) window.lucide.createIcons({ root: bar });
+}
+
+// Admin changed the branch view → persist and reload so every page section
+// re-fetches its data scoped to the chosen branch.
+function onBranchSwitch(value) {
+  setAdminBranch(value);
+  window.location.reload();
 }
 
 function setActiveNav() {
@@ -461,7 +565,7 @@ function renderUserTable(users) {
   const tbody = document.getElementById("users-body");
   if (!tbody) return;
   if (users.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--slate-400);">No users found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--slate-400);">No users found.</td></tr>`;
     return;
   }
 
@@ -506,6 +610,7 @@ function renderUserTable(users) {
         </td>
         <td>${escapeHtml(u.username)}</td>
         <td style="text-transform:capitalize;">${u.role}</td>
+        <td>${u.role === "admin" ? '<span style="color:var(--slate-400);">All branches</span>' : escapeHtml(branchName(u.branchId))}</td>
         <td><span class="status ${statusClass}">${u.status}</span></td>
         <td style="white-space:nowrap;">
           ${resetPwBtn}
@@ -538,19 +643,26 @@ function setupUserManagement() {
       const userEl = document.getElementById("cu-username");
       const passEl = document.getElementById("cu-password");
       const roleEl = document.getElementById("cu-role");
+      const branchEl = document.getElementById("cu-branch");
 
       const name = nameEl.value.trim();
       const username = userEl.value.trim();
       const password = passEl.value;
       const role = roleEl.value;
+      // Admins are branch-agnostic; staff MUST be assigned to a branch.
+      const branchId = role === "admin" ? null : (branchEl ? branchEl.value : "");
 
       const users = getUsers();
       if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         setFieldError(userEl, "Username already exists.");
         return;
       }
+      if (role === "staff" && !branchId) {
+        if (branchEl) setFieldError(branchEl, "Please assign a branch for this staff account.");
+        return;
+      }
 
-      const payload = { id: nextUserId(), name, username, password, role, status: "Active" };
+      const payload = { id: nextUserId(), name, username, password, role, status: "Active", branchId };
       try {
         await fetch(`${API_URL}/users`, {
           method: "POST",
@@ -570,11 +682,28 @@ function setupUserManagement() {
   }
 }
 
+// Fill the branch dropdown from the loaded branch list.
+function populateBranchDropdown() {
+  const sel = document.getElementById("cu-branch");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">Select a branch…</option>` +
+    appBranches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("");
+}
+
+// Show/hide the (mandatory) branch field depending on the chosen role.
+function onCreateUserRoleChange(role) {
+  const group = document.getElementById("cu-branch-group");
+  if (group) group.style.display = role === "admin" ? "none" : "";
+}
+
 function openCreateUserModal() {
   const modal = document.getElementById("create-user-modal");
   if (modal) {
-    document.getElementById("create-user-form").reset();
-    clearFormErrors(document.getElementById("create-user-form"));
+    const form = document.getElementById("create-user-form");
+    form.reset();
+    clearFormErrors(form);
+    populateBranchDropdown();
+    onCreateUserRoleChange(document.getElementById("cu-role").value);
     modal.style.display = "flex";
   }
 }
@@ -2443,12 +2572,12 @@ function setupStockIn() {
           return (!isNaN(num) && num > max) ? num : max;
         }, 0) + 1
       ).padStart(2, "0");
-      productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName };
+      productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName, branchId: writeBranchId() };
       productAction = 'POST';
     }
 
     const txnId = nextTxnId();
-    const txnPayload = { id: txnId, product: txnProduct, category: cat, type: "Stock In", quantity: qty, unit, date: dateStr, time: timeStr, user: shortName };
+    const txnPayload = { id: txnId, product: txnProduct, category: cat, type: "Stock In", quantity: qty, unit, date: dateStr, time: timeStr, user: shortName, branchId: writeBranchId() };
 
     showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
       try {
@@ -2721,7 +2850,7 @@ function setupStockOut() {
 
     showStockOutConfirm(prod, qty, async function () {
       const txnId = nextTxnId();
-      const txnPayload = { id: txnId, product: prod.name, category: prod.category, type: "Stock Out", quantity: qty, unit: prod.unit, date: getDateStr(), time: getTimeStr(), user: getShortName() };
+      const txnPayload = { id: txnId, product: prod.name, category: prod.category, type: "Stock Out", quantity: qty, unit: prod.unit, date: getDateStr(), time: getTimeStr(), user: getShortName(), branchId: writeBranchId() };
 
       try {
         const negativeQty = parseInt("-" + qty, 10);
@@ -3932,15 +4061,20 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (!res || !res.ok) return null;
       return await res.json().catch(() => null);
     };
-    const [uRes, pRes, tRes, settingsRes] = await Promise.all([
+    // Admin GETs carry a ?branch filter (all | one branch). Staff send nothing —
+    // the server scopes them to their own branch from the token.
+    const bq = branchQuery();
+    const [uRes, pRes, tRes, settingsRes, bRes] = await Promise.all([
       safeFetch(`${API_URL}/users`),
-      safeFetch(`${API_URL}/inventory`),
-      safeFetch(`${API_URL}/transactions`),
-      safeFetch(`${API_URL}/settings`)
+      safeFetch(`${API_URL}/inventory${bq}`),
+      safeFetch(`${API_URL}/transactions${bq}`),
+      safeFetch(`${API_URL}/settings`),
+      safeFetch(`${API_URL}/branches`)
     ]);
     appUsers = Array.isArray(uRes) ? uRes : [];
     appProducts = Array.isArray(pRes) ? pRes : [];
     appTxns = Array.isArray(tRes) ? tRes : [];
+    appBranches = Array.isArray(bRes) ? bRes : [];
 
     // Sync server-side settings into localStorage so all pages read consistent values
     if (settingsRes && typeof settingsRes === 'object') {
@@ -3973,6 +4107,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   setActiveNav();
+  renderBranchContext();
 
   if (userRole && !sessionStorage.getItem("welcomeShown")) {
     showWelcomeModal(displayName, userRole);
