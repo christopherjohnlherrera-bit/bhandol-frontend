@@ -109,6 +109,22 @@ function getLowStockThreshold() {
   return isNaN(val) || val < 1 ? 8 : val;
 }
 
+// Low Stock Detection: dynamically evaluate against product's configured min_threshold, falling back to default threshold
+function isProductLowStock(p) {
+  if (!p) return false;
+  const minVal = (p.min_threshold !== undefined && p.min_threshold !== null && p.min_threshold !== '') ? parseInt(p.min_threshold, 10)
+               : (p.min_stock !== undefined && p.min_stock !== null && p.min_stock !== '') ? parseInt(p.min_stock, 10)
+               : (p.minStock !== undefined && p.minStock !== null && p.minStock !== '') ? parseInt(p.minStock, 10)
+               : (p.minThreshold !== undefined && p.minThreshold !== null && p.minThreshold !== '') ? parseInt(p.minThreshold, 10)
+               : 0;
+
+  if (!isNaN(minVal) && minVal > 0) {
+    return p.quantity > 0 && p.quantity <= minVal;
+  }
+  const fallback = getLowStockThreshold();
+  return p.quantity > 0 && p.quantity <= fallback;
+}
+
 // Low Stock Protection — configurable toggle, persisted in localStorage (synced from server settings)
 function getLowStockProtectionEnabled() {
   return localStorage.getItem("lowStockProtectionEnabled") === "true";
@@ -1245,7 +1261,7 @@ function loadDashboard() {
   const txns = getTransactions();
 
   const threshold = getLowStockThreshold();
-  const lowStock = products.filter(p => p.quantity > 0 && p.quantity <= threshold).length;
+  const lowStock = products.filter(p => isProductLowStock(p)).length;
   const outStock = products.filter(p => p.quantity === 0).length;
 
   // Filter transactions by current month/year for "This Month" stats
@@ -1839,10 +1855,9 @@ function openStatModal(type) {
       <td style="font-weight:600;">${catCounts[cat]}</td>
     </tr>`);
   } else if (type === 'Low Stock Items') {
-    headers = ['Product Name', 'Category', 'Current Stock', 'Prediction'];
-    // Bug Fix: was hardcoded to 10 — now uses the shared getLowStockThreshold() helper
-    const threshold = getLowStockThreshold();
-    const lowProds = products.filter(p => p.quantity <= threshold);
+    headers = ['Product Name', 'Category', 'Current Stock', 'Min Threshold', 'Prediction'];
+    // Dynamic: uses per-product min_threshold via isProductLowStock()
+    const lowProds = products.filter(p => isProductLowStock(p) || p.quantity === 0);
 
     // Smart Restock Analytics (Phase 9.4)
     const today = new Date();
@@ -1853,6 +1868,16 @@ function openStatModal(type) {
     rows = lowProds.map(p => {
       const isOut = p.quantity === 0;
       const color = isOut ? 'var(--red-600)' : 'var(--amber-600)';
+
+      // Resolve per-product min threshold (same logic as isProductLowStock)
+      const resolvedMin = (p.min_threshold !== undefined && p.min_threshold !== null && p.min_threshold !== '') ? parseInt(p.min_threshold, 10)
+                        : (p.min_stock !== undefined && p.min_stock !== null && p.min_stock !== '') ? parseInt(p.min_stock, 10)
+                        : (p.minStock !== undefined && p.minStock !== null && p.minStock !== '') ? parseInt(p.minStock, 10)
+                        : (p.minThreshold !== undefined && p.minThreshold !== null && p.minThreshold !== '') ? parseInt(p.minThreshold, 10)
+                        : null;
+      const minThresholdDisplay = (!isNaN(resolvedMin) && resolvedMin > 0)
+        ? `<span style="font-weight:600; color:var(--amber-600);">${resolvedMin}</span>`
+        : `<span style="color:var(--slate-400); font-size:12px;">—</span>`;
 
       // Calculate 30-day velocity
       const pTxns = txns.filter(t => t.product === p.name && t.type === 'Stock Out');
@@ -1894,10 +1919,11 @@ function openStatModal(type) {
         <td>${p.name}</td>
         <td>${typeof categoryBadge === 'function' ? categoryBadge(p.category) : p.category}</td>
         <td style="font-weight:600; color:${color};">${p.quantity}</td>
+        <td>${minThresholdDisplay}</td>
         <td>${runoutHtml}</td>
       </tr>`;
     });
-    if (rows.length === 0) rows = [`<tr><td colspan="4" style="text-align:center;color:var(--slate-400);padding:20px;">No low stock items.</td></tr>`];
+    if (rows.length === 0) rows = [`<tr><td colspan="5" style="text-align:center;color:var(--slate-400);padding:20px;">No low stock items.</td></tr>`];
   } else if (type === 'Stock In (This Month)' || type === 'Stock Out (This Month)') {
     headers = ['Date', 'Product', 'Category', 'Qty', 'User'];
     const isSumIn = type.includes('Stock In');
@@ -2890,6 +2916,24 @@ function setupStockOut() {
       }
     }
 
+    // ── Per-product Min Threshold Hard-Block (client-side pre-flight) ─────────
+    // Mirrors backend THRESHOLD_INTERCEPT logic for instant UX feedback before API call.
+    // Uses the product's own min_threshold + is_enforced flag, falling back to global enforcement.
+    const _prodMinThreshold = parseInt(prod.min_threshold, 10) || 0;
+    const _globalEnfOn = localStorage.getItem('global_threshold_enforcement') === 'true';
+    if ((_globalEnfOn || Boolean(prod.is_enforced)) && _prodMinThreshold > 0) {
+      const _projectedStock = prod.quantity - qty;
+      if (_projectedStock < _prodMinThreshold) {
+        showToast('error', '🚫 Threshold Intercept — Stock-Out Blocked',
+          `Cannot deduct ${qty} ${prod.unit} of "${prod.name}": projected stock (${_projectedStock}) would fall below the enforced MIN threshold of ${_prodMinThreshold}. Ask an Admin to adjust the threshold if needed.`,
+          8000
+        );
+        soSubmitting = false;
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+      }
+    }
+
     showStockOutConfirm(prod, qty, async function () {
       const txnId = nextTxnId();
       const txnPayload = { id: txnId, product: prod.name, category: prod.category, type: "Stock Out", quantity: qty, unit: prod.unit, date: getDateStr(), time: getTimeStr(), user: getShortName(), branchId: writeBranchId() };
@@ -2899,6 +2943,16 @@ function setupStockOut() {
         const soRes = await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: negativeQty }) });
         if (!soRes.ok) {
           const errData = await soRes.json().catch(() => ({}));
+
+          // ── THRESHOLD GOVERNANCE: Min-Threshold Hard Block ────────────────
+          // Server blocked the transaction via THRESHOLD_INTERCEPT — show a clear error.
+          if (errData.error === 'THRESHOLD_INTERCEPT') {
+            showToast('error', '🚫 Threshold Intercept — Stock-Out Blocked',
+              errData.message || `Stock-Out blocked: projected stock would violate the enforced MIN threshold of ${errData.min_threshold ?? '?'}.`,
+              8000
+            );
+            return; // Do NOT proceed with transaction record
+          }
 
           // ── THRESHOLD GOVERNANCE: Critical Low Stock Warning ──────────────
           // The server logged the CRITICAL_LOW_STOCK event; display it here as a banner
@@ -4601,21 +4655,21 @@ function renderGovernanceTable() {
           <td style="font-size:12px;">${escapeHtml(displayBranch)}</td>
           <td>${categoryBadge(p.category)}</td>
           <td style="font-weight:700;color:${stockColor};">${p.quantity}</td>
-          <td>
+          <td class="col-thresh">
             <input type="number" class="thresh-input" id="min-${p.id}"
               value="${minVal}" min="0" placeholder="0" title="Min threshold for ${escapeHtml(p.name)}">
           </td>
-          <td>
+          <td class="col-thresh">
             <input type="number" class="thresh-input" id="max-${p.id}"
               value="${maxVal}" min="0" placeholder="0" title="Max threshold for ${escapeHtml(p.name)}">
           </td>
-          <td>
+          <td class="col-enforced">
             <label class="enforced-switch" title="Toggle individual enforcement">
               <input type="checkbox" id="enf-${p.id}" ${isEnf ? 'checked' : ''}>
               <span class="enforced-slider"></span>
             </label>
           </td>
-          <td>
+          <td class="col-action">
             <button class="thresh-save-btn" onclick="saveProductThreshold('${escapeHtml(p.id)}')">
               <i data-lucide="save" class="lucide-icon" style="width:12px;height:12px;"></i> Save
             </button>

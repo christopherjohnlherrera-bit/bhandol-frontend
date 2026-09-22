@@ -4215,6 +4215,32 @@ body:not(.is-admin) .employee-panel-only { display: block; }
 .governance-table .thresh-input:focus { border-color: var(--blue-500); outline: none; }
 .governance-table .thresh-input.invalid { border-color: var(--red-500); }
 
+/* Column alignment for Min/Max inputs, switches, and save buttons */
+.governance-table th.col-thresh,
+.governance-table td.col-thresh {
+  text-align: center;
+  width: 100px;
+}
+.governance-table td.col-thresh .thresh-input {
+  margin: 0 auto;
+  display: block;
+  text-align: center;
+}
+.governance-table th.col-enforced,
+.governance-table td.col-enforced {
+  text-align: center;
+  width: 90px;
+}
+.governance-table td.col-enforced .enforced-switch {
+  margin: 0 auto;
+  display: inline-block;
+}
+.governance-table th.col-action,
+.governance-table td.col-action {
+  text-align: center;
+  width: 90px;
+}
+
 /* ── Enforced toggle (small inline switch) ── */
 .enforced-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
 .enforced-switch input { opacity: 0; width: 0; height: 0; }
