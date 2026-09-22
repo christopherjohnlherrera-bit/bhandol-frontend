@@ -17,7 +17,7 @@ const PROD_BACKEND = "https://bhandol-backend.onrender.com";
 // backend's own port) so it works even when the frontend is served separately —
 // e.g. VS Code Live Server on :5500 — instead of by the backend itself.
 const LOCAL_BACKEND = "http://localhost:3000";
-const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname);
+const isLocalHost = ["localhost", "127.0.0.1", ""].includes(location.hostname) || location.protocol === "file:";
 const API_URL = isLocalHost ? `${LOCAL_BACKEND}/api` : `${PROD_BACKEND}/api`;
 
 // ── Branch / auth state ──────────────────────────────────────────
@@ -4066,7 +4066,77 @@ window.openWidgetFullscreen = function (cardId) {
 let thresholdProducts = []; // all products with threshold fields
 let thresholdRequests = []; // all requests (filtered by role)
 let govCurrentPage   = 1;
-const GOV_PAGE_SIZE  = 15;
+const GOV_PAGE_SIZE  = 10;
+
+// Normalize product threshold properties with sensible defaults
+function normalizeProductThreshold(p) {
+  const minVal = (p.min_threshold !== undefined && p.min_threshold !== null) ? p.min_threshold
+               : (p.min_stock !== undefined && p.min_stock !== null) ? p.min_stock
+               : (p.minStock !== undefined && p.minStock !== null) ? p.minStock
+               : (p.minThreshold !== undefined && p.minThreshold !== null) ? p.minThreshold
+               : 0;
+
+  const maxVal = (p.max_threshold !== undefined && p.max_threshold !== null) ? p.max_threshold
+               : (p.max_stock !== undefined && p.max_stock !== null) ? p.max_stock
+               : (p.maxStock !== undefined && p.maxStock !== null) ? p.maxStock
+               : (p.maxThreshold !== undefined && p.maxThreshold !== null) ? p.maxThreshold
+               : 0;
+
+  const isEnforced = (p.is_enforced !== undefined && p.is_enforced !== null) ? Boolean(p.is_enforced)
+                   : (p.isEnforced !== undefined && p.isEnforced !== null) ? Boolean(p.isEnforced)
+                   : (p.enforced !== undefined && p.enforced !== null) ? Boolean(p.enforced)
+                   : false;
+
+  const minNum = parseInt(minVal, 10);
+  const maxNum = parseInt(maxVal, 10);
+
+  return {
+    ...p,
+    id: p.id || p._id || `PROD_${Math.random().toString(36).substr(2, 9)}`,
+    name: p.name || 'Unnamed Product',
+    category: p.category || 'General',
+    unit: p.unit || 'pcs',
+    quantity: parseInt(p.quantity, 10) || 0,
+    branchId: p.branchId || p.branch_id || p.branch || '',
+    min_threshold: isNaN(minNum) ? 0 : Math.max(0, minNum),
+    max_threshold: isNaN(maxNum) ? 0 : Math.max(0, maxNum),
+    is_enforced: isEnforced
+  };
+}
+
+// Update UI elements representing global enforcement toggle state
+function applyGlobalToggleUI(isOn) {
+  // Update all enforcement badges on the page
+  ['global-status-badge', 'emp-global-status-badge'].forEach(id => {
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    badge.className = `enforcement-status-badge ${isOn ? 'on' : 'off'}`;
+    badge.innerHTML = isOn
+      ? `<i data-lucide="shield-check" class="lucide-icon" style="width:10px;height:10px;"></i> Active`
+      : `<i data-lucide="x-circle" class="lucide-icon" style="width:10px;height:10px;"></i> Inactive`;
+  });
+
+  // Update master card border
+  const masterCard = document.getElementById('master-switch-card');
+  if (masterCard) {
+    masterCard.classList.toggle('enforcement-on',  isOn);
+    masterCard.classList.toggle('enforcement-off', !isOn);
+  }
+
+  // Sync the toggle input state
+  const toggle = document.getElementById('toggle-global-enforcement');
+  if (toggle) toggle.checked = isOn;
+
+  // Employee read-only description
+  const empDesc = document.getElementById('emp-enforcement-desc');
+  if (empDesc) {
+    empDesc.textContent = isOn
+      ? 'Enforcement is ACTIVE. Stock-In transactions that exceed product max thresholds will be blocked. Submit a Limit Expansion Request if you need higher capacity.'
+      : 'Enforcement is currently INACTIVE. Threshold limits are in monitoring mode only — transactions proceed normally.';
+  }
+
+  if (window.lucide) window.lucide.createIcons();
+}
 
 function setupThreshold() {
   const role = getUserRole();
@@ -4093,42 +4163,47 @@ function setupThreshold() {
 //  SHARED: Load global enforcement state
 // ─────────────────────────────────────────────────────────────────────────────
 async function loadThresholdSettings() {
+  // First, check localStorage for immediate zero-latency render
+  const localVal = localStorage.getItem('global_threshold_enforcement');
+  if (localVal !== null) {
+    applyGlobalToggleUI(localVal === 'true');
+  }
+
   try {
-    const res = await fetch(`${API_URL}/threshold/settings`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const isOn = !!data.global_threshold_enforcement;
+    const token = getAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    // Update all enforcement badges on the page
-    ['global-status-badge', 'emp-global-status-badge'].forEach(id => {
-      const badge = document.getElementById(id);
-      if (!badge) return;
-      badge.className = `enforcement-status-badge ${isOn ? 'on' : 'off'}`;
-      badge.innerHTML = isOn
-        ? `<i data-lucide="shield-check" class="lucide-icon" style="width:10px;height:10px;"></i> Active`
-        : `<i data-lucide="x-circle" class="lucide-icon" style="width:10px;height:10px;"></i> Inactive`;
-    });
+    let isOn = false;
+    let fetched = false;
 
-    // Update master card border
-    const masterCard = document.getElementById('master-switch-card');
-    if (masterCard) {
-      masterCard.classList.toggle('enforcement-on',  isOn);
-      masterCard.classList.toggle('enforcement-off', !isOn);
+    // Fetch global settings
+    const res = await fetch(`${API_URL}/settings`, { headers }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data && typeof data === 'object' && ('global_threshold_enforcement' in data)) {
+        const val = data.global_threshold_enforcement;
+        isOn = val === true || val === 'true' || val === 1 || val === '1';
+        fetched = true;
+      }
     }
 
-    // Sync the toggle input state
-    const toggle = document.getElementById('toggle-global-enforcement');
-    if (toggle) toggle.checked = isOn;
-
-    // Employee read-only description
-    const empDesc = document.getElementById('emp-enforcement-desc');
-    if (empDesc) {
-      empDesc.textContent = isOn
-        ? 'Enforcement is ACTIVE. Stock-In transactions that exceed product max thresholds will be blocked. Submit a Limit Expansion Request if you need higher capacity.'
-        : 'Enforcement is currently INACTIVE. Threshold limits are in monitoring mode only — transactions proceed normally.';
+    if (!fetched) {
+      const fRes = await fetch(`${API_URL}/threshold/settings`, { headers }).catch(() => null);
+      if (fRes && fRes.ok) {
+        const fData = await fRes.json().catch(() => ({}));
+        const val = fData.global_threshold_enforcement;
+        isOn = val === true || val === 'true' || val === 1 || val === '1';
+        fetched = true;
+      }
     }
 
-    if (window.lucide) window.lucide.createIcons();
+    if (fetched) {
+      localStorage.setItem('global_threshold_enforcement', String(isOn));
+      applyGlobalToggleUI(isOn);
+    } else if (localVal !== null) {
+      applyGlobalToggleUI(localVal === 'true');
+    }
   } catch (err) {
     console.warn('[Threshold] Could not load settings:', err);
   }
@@ -4141,12 +4216,25 @@ async function setupThresholdAdmin() {
   // Wire global enforcement toggle
   const toggle = document.getElementById('toggle-global-enforcement');
   if (toggle) {
+    const saved = localStorage.getItem('global_threshold_enforcement');
+    if (saved !== null) {
+      toggle.checked = saved === 'true';
+    }
+
     toggle.addEventListener('change', async () => {
       const newVal = toggle.checked;
+      // Immediately write localStorage & update UI for zero-latency
+      localStorage.setItem('global_threshold_enforcement', String(newVal));
+      applyGlobalToggleUI(newVal);
+
       try {
+        const token = getAuthToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         await fetch(`${API_URL}/settings`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ key: 'global_threshold_enforcement', value: String(newVal) })
         });
         showToast(
@@ -4156,18 +4244,22 @@ async function setupThresholdAdmin() {
             ? 'Threshold enforcement is now ACTIVE across all enforced products.'
             : 'Threshold enforcement is now INACTIVE. All transactions proceed in soft-monitoring mode.'
         );
-        // Refresh badges / card state
-        loadThresholdSettings();
       } catch (err) {
-        showToast('error', 'Save Failed', 'Could not update global enforcement setting.');
-        // Revert toggle on error
-        toggle.checked = !newVal;
+        console.error('[Threshold] Error saving global enforcement setting:', err);
+        showToast('error', 'Save Failed', 'Could not update global enforcement setting on server.');
       }
     });
   }
 
   // Populate branch filter with "All Branches" as default selection
   populateBranchFilter();
+
+  // Seed threshold products immediately from appProducts if available
+  if (thresholdProducts.length === 0 && Array.isArray(appProducts) && appProducts.length > 0) {
+    thresholdProducts = appProducts.map(normalizeProductThreshold);
+    populateBranchFilter();
+    renderGovernanceTable();
+  }
 
   // Load pending requests
   await loadPendingRequests();
@@ -4379,6 +4471,13 @@ function matchProductBranch(p, selectedBranch) {
 async function loadGovernanceProducts() {
   const tbody = document.getElementById('governance-products-body');
   try {
+    // Seed immediately from in-memory appProducts if available
+    if (thresholdProducts.length === 0 && Array.isArray(appProducts) && appProducts.length > 0) {
+      thresholdProducts = appProducts.map(normalizeProductThreshold);
+      populateBranchFilter();
+      renderGovernanceTable();
+    }
+
     const token = getAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -4436,41 +4535,7 @@ async function loadGovernanceProducts() {
       items = [...appProducts];
     }
 
-    // Populate fallbacks for Min/Max thresholds and enforcement state
-    thresholdProducts = items.map(p => {
-      const minVal = (p.min_threshold !== undefined && p.min_threshold !== null) ? p.min_threshold
-                   : (p.min_stock !== undefined && p.min_stock !== null) ? p.min_stock
-                   : (p.minStock !== undefined && p.minStock !== null) ? p.minStock
-                   : (p.minThreshold !== undefined && p.minThreshold !== null) ? p.minThreshold
-                   : 0;
-
-      const maxVal = (p.max_threshold !== undefined && p.max_threshold !== null) ? p.max_threshold
-                   : (p.max_stock !== undefined && p.max_stock !== null) ? p.max_stock
-                   : (p.maxStock !== undefined && p.maxStock !== null) ? p.maxStock
-                   : (p.maxThreshold !== undefined && p.maxThreshold !== null) ? p.maxThreshold
-                   : 0;
-
-      const isEnforced = (p.is_enforced !== undefined && p.is_enforced !== null) ? Boolean(p.is_enforced)
-                       : (p.isEnforced !== undefined && p.isEnforced !== null) ? Boolean(p.isEnforced)
-                       : (p.enforced !== undefined && p.enforced !== null) ? Boolean(p.enforced)
-                       : false;
-
-      const minNum = parseInt(minVal, 10);
-      const maxNum = parseInt(maxVal, 10);
-
-      return {
-        ...p,
-        id: p.id || p._id || `PROD_${Math.random().toString(36).substr(2, 9)}`,
-        name: p.name || 'Unnamed Product',
-        category: p.category || 'General',
-        unit: p.unit || 'pcs',
-        quantity: parseInt(p.quantity, 10) || 0,
-        branchId: p.branchId || p.branch_id || p.branch || '',
-        min_threshold: isNaN(minNum) ? 0 : Math.max(0, minNum),
-        max_threshold: isNaN(maxNum) ? 0 : Math.max(0, maxNum),
-        is_enforced: isEnforced
-      };
-    });
+    thresholdProducts = items.map(normalizeProductThreshold);
 
     console.log(`[Threshold] Loaded ${thresholdProducts.length} total product(s) for Governance Controls:`, thresholdProducts);
 
@@ -4481,7 +4546,7 @@ async function loadGovernanceProducts() {
     renderGovernanceTable();
   } catch (err) {
     console.error('[Threshold] Error loading governance products:', err);
-    if (tbody) {
+    if (tbody && (!thresholdProducts || thresholdProducts.length === 0)) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red-600);padding:24px;">Failed to load products: ${escapeHtml(err.message || 'Unknown error')}</td></tr>`;
     }
   }
@@ -4508,10 +4573,11 @@ function renderGovernanceTable() {
   // Filter by branch with case-insensitive ID/name matching + default display for products without explicit branch
   filtered = filtered.filter(p => matchProductBranch(p, branchSel));
 
-  const totalPages = Math.ceil(filtered.length / GOV_PAGE_SIZE) || 1;
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / GOV_PAGE_SIZE) || 1;
   if (govCurrentPage > totalPages) govCurrentPage = totalPages;
   if (govCurrentPage < 1) govCurrentPage = 1;
-  const start    = (govCurrentPage - 1) * GOV_PAGE_SIZE;
+  const start     = (govCurrentPage - 1) * GOV_PAGE_SIZE;
   const paginated = filtered.slice(start, start + GOV_PAGE_SIZE);
 
   if (paginated.length === 0) {
@@ -4563,14 +4629,27 @@ function renderGovernanceTable() {
   const pageInfo = document.getElementById('gov-page-info');
   const prevBtn  = document.getElementById('gov-prev');
   const nextBtn  = document.getElementById('gov-next');
-  if (pageInfo) pageInfo.textContent = `Page ${govCurrentPage} of ${totalPages} (${filtered.length} products)`;
+  if (pageInfo) {
+    const displayPage = totalItems > 0 ? govCurrentPage : 1;
+    pageInfo.textContent = `Page ${displayPage} of ${totalPages} (${totalItems} product${totalItems === 1 ? '' : 's'})`;
+  }
   if (prevBtn) {
     prevBtn.disabled = govCurrentPage <= 1;
-    prevBtn.onclick  = () => { if (govCurrentPage > 1) { govCurrentPage--; renderGovernanceTable(); } };
+    prevBtn.onclick  = () => {
+      if (govCurrentPage > 1) {
+        govCurrentPage--;
+        renderGovernanceTable();
+      }
+    };
   }
   if (nextBtn) {
-    nextBtn.disabled = govCurrentPage >= totalPages;
-    nextBtn.onclick  = () => { if (govCurrentPage < totalPages) { govCurrentPage++; renderGovernanceTable(); } };
+    nextBtn.disabled = govCurrentPage >= totalPages || totalItems === 0;
+    nextBtn.onclick  = () => {
+      if (govCurrentPage < totalPages) {
+        govCurrentPage++;
+        renderGovernanceTable();
+      }
+    };
   }
 }
 
@@ -4896,10 +4975,21 @@ document.addEventListener("DOMContentLoaded", async function () {
       safeFetch(`${API_URL}/settings`),
       safeFetch(`${API_URL}/branches`)
     ]);
-    appUsers = Array.isArray(uRes) ? uRes : [];
-    appProducts = Array.isArray(pRes) ? pRes : [];
-    appTxns = Array.isArray(tRes) ? tRes : [];
-    appBranches = Array.isArray(bRes) ? bRes : [];
+    const unpackPayloadList = (r) => {
+      if (Array.isArray(r)) return r;
+      if (r && typeof r === 'object') {
+        if (Array.isArray(r.data)) return r.data;
+        if (Array.isArray(r.products)) return r.products;
+        if (Array.isArray(r.items)) return r.items;
+        if (Array.isArray(r.inventory)) return r.inventory;
+        if (Array.isArray(r.rows)) return r.rows;
+      }
+      return [];
+    };
+    appUsers = unpackPayloadList(uRes);
+    appProducts = unpackPayloadList(pRes);
+    appTxns = unpackPayloadList(tRes);
+    appBranches = unpackPayloadList(bRes);
 
     // Sync server-side settings into localStorage so all pages read consistent values
     if (settingsRes && typeof settingsRes === 'object') {
@@ -4908,6 +4998,9 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
       if ('lowStockProtectionEnabled' in settingsRes) {
         localStorage.setItem('lowStockProtectionEnabled', settingsRes.lowStockProtectionEnabled);
+      }
+      if ('global_threshold_enforcement' in settingsRes) {
+        localStorage.setItem('global_threshold_enforcement', String(settingsRes.global_threshold_enforcement));
       }
     }
   } catch (e) {
