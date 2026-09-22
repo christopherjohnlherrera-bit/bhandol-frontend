@@ -4166,25 +4166,27 @@ async function setupThresholdAdmin() {
     });
   }
 
-  // Populate branch filter
-  const branchSel = document.getElementById('thresh-branch-filter');
-  if (branchSel && appBranches.length) {
-    const opts = appBranches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
-    branchSel.innerHTML = `<option value="all">All Branches</option>${opts}`;
-  }
+  // Populate branch filter with "All Branches" as default selection
+  populateBranchFilter();
 
   // Load pending requests
   await loadPendingRequests();
 
-  // Load products governance table
+  // Load products governance table using exact same inventory endpoint as inventory.html
   await loadGovernanceProducts();
 
   // Load audit log
   await loadAuditLog();
 
   // Wire search + branch filter
-  document.getElementById('thresh-product-search')?.addEventListener('input', () => renderGovernanceTable());
-  document.getElementById('thresh-branch-filter')?.addEventListener('change', () => renderGovernanceTable());
+  document.getElementById('thresh-product-search')?.addEventListener('input', () => {
+    govCurrentPage = 1;
+    renderGovernanceTable();
+  });
+  document.getElementById('thresh-branch-filter')?.addEventListener('change', () => {
+    govCurrentPage = 1;
+    renderGovernanceTable();
+  });
 
   // Wire reject reason modal
   const rejectModal = document.getElementById('reject-reason-modal');
@@ -4192,6 +4194,34 @@ async function setupThresholdAdmin() {
     document.getElementById('reject-reason-cancel').onclick = () => rejectModal.style.display = 'none';
     rejectModal.onclick = (e) => { if (e.target === rejectModal) rejectModal.style.display = 'none'; };
   }
+}
+
+// Dynamically populate the branch filter dropdown with "All Branches" as the default selection
+function populateBranchFilter() {
+  const branchSel = document.getElementById('thresh-branch-filter');
+  if (!branchSel) return;
+  const currentVal = branchSel.value || 'all';
+
+  const branchMap = new Map();
+  // Register known branches from appBranches
+  (appBranches || []).forEach(b => {
+    if (b && b.id) branchMap.set(String(b.id), b.name || b.id);
+  });
+  // Discover any branches directly present on loaded products
+  (thresholdProducts || []).forEach(p => {
+    const bId = p.branchId || p.branch_id || p.branch;
+    if (bId && !branchMap.has(String(bId))) {
+      branchMap.set(String(bId), branchName(bId) || String(bId));
+    }
+  });
+
+  let optionsHtml = '<option value="all" selected>All Branches</option>';
+  branchMap.forEach((name, id) => {
+    optionsHtml += `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`;
+  });
+  branchSel.innerHTML = optionsHtml;
+  branchSel.value = currentVal;
+  if (!branchSel.value) branchSel.value = 'all';
 }
 
 // Load all expansion requests (admin sees all statuses for pending tab; all combined)
@@ -4306,15 +4336,154 @@ window.openRejectModal = function (reqId) {
   };
 };
 
-// Load all products with threshold config
+// Branch matching logic: case-insensitive ID or string matching + default display for products without explicit branch
+function matchProductBranch(p, selectedBranch) {
+  if (!selectedBranch || selectedBranch.toString().trim().toLowerCase() === 'all') {
+    return true;
+  }
+
+  // If a product does not have an explicit branch assigned, default it to display rather than filtering it out
+  const pBranchId = (p.branchId || p.branch_id || '').toString().trim();
+  const pBranchName = (p.branch || p.branchName || p.branch_name || '').toString().trim();
+  if (!pBranchId && !pBranchName) {
+    return true;
+  }
+
+  const sel = selectedBranch.toString().trim().toLowerCase();
+
+  // Case-insensitive ID matching
+  if (pBranchId && pBranchId.toLowerCase() === sel) return true;
+  // Case-insensitive Name matching
+  if (pBranchName && pBranchName.toLowerCase() === sel) return true;
+
+  // Cross-reference with appBranches registry
+  const bObj = (appBranches || []).find(b =>
+    (b.id && b.id.toString().trim().toLowerCase() === sel) ||
+    (b.name && b.name.toString().trim().toLowerCase() === sel)
+  );
+  if (bObj) {
+    const bId = (bObj.id || '').toLowerCase();
+    const bName = (bObj.name || '').toLowerCase();
+    if (pBranchId && (pBranchId.toLowerCase() === bId || pBranchId.toLowerCase() === bName)) return true;
+    if (pBranchName && (pBranchName.toLowerCase() === bId || pBranchName.toLowerCase() === bName)) return true;
+  }
+
+  // Partial / fuzzy substring matching (e.g., 'montalban' matches 'branch-montalban')
+  if (pBranchId && (pBranchId.toLowerCase().includes(sel) || sel.includes(pBranchId.toLowerCase()))) return true;
+  if (pBranchName && (pBranchName.toLowerCase().includes(sel) || sel.includes(pBranchName.toLowerCase()))) return true;
+
+  return false;
+}
+
+// Load all products with threshold config using exact same fetch URL and headers as inventory.html
 async function loadGovernanceProducts() {
+  const tbody = document.getElementById('governance-products-body');
   try {
-    const res = await fetch(`${API_URL}/threshold/products`);
-    thresholdProducts = res.ok ? await res.json() : [];
+    const token = getAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // Exact same fetch URL and authentication headers as inventory.html
+    // Include ?branch=all to ensure administrators load all items across all branches
+    const url = `${API_URL}/inventory?branch=all`;
+    let res = await fetch(url, { headers }).catch(e => {
+      console.warn('[Threshold] Fetch error with ?branch=all:', e);
+      return null;
+    });
+
+    if (!res || !res.ok) {
+      // Fallback: try direct /api/inventory without query parameter
+      res = await fetch(`${API_URL}/inventory`, { headers }).catch(e => {
+        console.warn('[Threshold] Fetch error without query:', e);
+        return null;
+      });
+    }
+
+    let rawData = null;
+    if (res && res.ok) {
+      rawData = await res.json().catch(e => {
+        console.error('[Threshold] Failed to parse JSON:', e);
+        return null;
+      });
+    }
+
+    // Required: Log the raw API response to console.log() inside threshold.html
+    console.log('[Threshold] Raw Inventory API response:', rawData);
+
+    // Response handling: correctly unpack array whether direct array [...] or object payload { success: true, data: [...] }
+    let items = [];
+    if (Array.isArray(rawData)) {
+      items = rawData;
+    } else if (rawData && typeof rawData === 'object') {
+      if (Array.isArray(rawData.data)) {
+        items = rawData.data;
+      } else if (Array.isArray(rawData.products)) {
+        items = rawData.products;
+      } else if (Array.isArray(rawData.items)) {
+        items = rawData.items;
+      } else if (Array.isArray(rawData.inventory)) {
+        items = rawData.inventory;
+      } else if (Array.isArray(rawData.rows)) {
+        items = rawData.rows;
+      } else if (Array.isArray(rawData.result)) {
+        items = rawData.result;
+      }
+    }
+
+    // Fallback: If network returned empty, use in-memory appProducts if available
+    if (items.length === 0 && Array.isArray(appProducts) && appProducts.length > 0) {
+      console.log('[Threshold] Fallback: using appProducts array from application context:', appProducts);
+      items = [...appProducts];
+    }
+
+    // Populate fallbacks for Min/Max thresholds and enforcement state
+    thresholdProducts = items.map(p => {
+      const minVal = (p.min_threshold !== undefined && p.min_threshold !== null) ? p.min_threshold
+                   : (p.min_stock !== undefined && p.min_stock !== null) ? p.min_stock
+                   : (p.minStock !== undefined && p.minStock !== null) ? p.minStock
+                   : (p.minThreshold !== undefined && p.minThreshold !== null) ? p.minThreshold
+                   : 0;
+
+      const maxVal = (p.max_threshold !== undefined && p.max_threshold !== null) ? p.max_threshold
+                   : (p.max_stock !== undefined && p.max_stock !== null) ? p.max_stock
+                   : (p.maxStock !== undefined && p.maxStock !== null) ? p.maxStock
+                   : (p.maxThreshold !== undefined && p.maxThreshold !== null) ? p.maxThreshold
+                   : 0;
+
+      const isEnforced = (p.is_enforced !== undefined && p.is_enforced !== null) ? Boolean(p.is_enforced)
+                       : (p.isEnforced !== undefined && p.isEnforced !== null) ? Boolean(p.isEnforced)
+                       : (p.enforced !== undefined && p.enforced !== null) ? Boolean(p.enforced)
+                       : false;
+
+      const minNum = parseInt(minVal, 10);
+      const maxNum = parseInt(maxVal, 10);
+
+      return {
+        ...p,
+        id: p.id || p._id || `PROD_${Math.random().toString(36).substr(2, 9)}`,
+        name: p.name || 'Unnamed Product',
+        category: p.category || 'General',
+        unit: p.unit || 'pcs',
+        quantity: parseInt(p.quantity, 10) || 0,
+        branchId: p.branchId || p.branch_id || p.branch || '',
+        min_threshold: isNaN(minNum) ? 0 : Math.max(0, minNum),
+        max_threshold: isNaN(maxNum) ? 0 : Math.max(0, maxNum),
+        is_enforced: isEnforced
+      };
+    });
+
+    console.log(`[Threshold] Loaded ${thresholdProducts.length} total product(s) for Governance Controls:`, thresholdProducts);
+
+    // Refresh branch filter options with all branches discovered
+    populateBranchFilter();
+
     govCurrentPage = 1;
     renderGovernanceTable();
   } catch (err) {
-    console.error('[Threshold] Failed to load products:', err);
+    console.error('[Threshold] Error loading governance products:', err);
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red-600);padding:24px;">Failed to load products: ${escapeHtml(err.message || 'Unknown error')}</td></tr>`;
+    }
   }
 }
 
@@ -4322,15 +4491,26 @@ function renderGovernanceTable() {
   const tbody = document.getElementById('governance-products-body');
   if (!tbody) return;
 
-  const searchQ  = (document.getElementById('thresh-product-search')?.value || '').toLowerCase();
-  const branchSel = document.getElementById('thresh-branch-filter')?.value || 'all';
+  const searchQ  = (document.getElementById('thresh-product-search')?.value || '').trim().toLowerCase();
+  const branchSel = (document.getElementById('thresh-branch-filter')?.value || 'all').trim();
 
-  let filtered = thresholdProducts;
-  if (searchQ)           filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQ) || p.category.toLowerCase().includes(searchQ));
-  if (branchSel !== 'all') filtered = filtered.filter(p => p.branchId === branchSel);
+  let filtered = thresholdProducts || [];
+
+  // Filter by search query
+  if (searchQ) {
+    filtered = filtered.filter(p =>
+      (p.name && p.name.toLowerCase().includes(searchQ)) ||
+      (p.category && p.category.toLowerCase().includes(searchQ)) ||
+      (p.id && String(p.id).toLowerCase().includes(searchQ))
+    );
+  }
+
+  // Filter by branch with case-insensitive ID/name matching + default display for products without explicit branch
+  filtered = filtered.filter(p => matchProductBranch(p, branchSel));
 
   const totalPages = Math.ceil(filtered.length / GOV_PAGE_SIZE) || 1;
   if (govCurrentPage > totalPages) govCurrentPage = totalPages;
+  if (govCurrentPage < 1) govCurrentPage = 1;
   const start    = (govCurrentPage - 1) * GOV_PAGE_SIZE;
   const paginated = filtered.slice(start, start + GOV_PAGE_SIZE);
 
@@ -4339,31 +4519,38 @@ function renderGovernanceTable() {
     if (window.lucide) window.lucide.createIcons({ root: tbody });
   } else {
     tbody.innerHTML = paginated.map(p => {
-      const stockColor = p.max_threshold > 0 && p.quantity > p.max_threshold ? 'var(--red-600)'
-                       : p.min_threshold > 0 && p.quantity < p.min_threshold ? 'var(--amber-500)'
+      const minVal = p.min_threshold !== undefined && p.min_threshold !== null ? p.min_threshold : 0;
+      const maxVal = p.max_threshold !== undefined && p.max_threshold !== null ? p.max_threshold : 0;
+      const isEnf = Boolean(p.is_enforced);
+
+      const stockColor = maxVal > 0 && p.quantity > maxVal ? 'var(--red-600)'
+                       : minVal > 0 && p.quantity < minVal ? 'var(--amber-500)'
                        : 'inherit';
+
+      const displayBranch = p.branchId ? branchName(p.branchId) : (p.branch || 'All Branches');
+
       return `
-        <tr data-prodid="${p.id}">
+        <tr data-prodid="${escapeHtml(p.id)}">
           <td><strong>${escapeHtml(p.name)}</strong></td>
-          <td style="font-size:12px;">${escapeHtml(branchName(p.branchId))}</td>
+          <td style="font-size:12px;">${escapeHtml(displayBranch)}</td>
           <td>${categoryBadge(p.category)}</td>
           <td style="font-weight:700;color:${stockColor};">${p.quantity}</td>
           <td>
             <input type="number" class="thresh-input" id="min-${p.id}"
-              value="${p.min_threshold || 0}" min="0" title="Min threshold for ${escapeHtml(p.name)}">
+              value="${minVal}" min="0" placeholder="0" title="Min threshold for ${escapeHtml(p.name)}">
           </td>
           <td>
             <input type="number" class="thresh-input" id="max-${p.id}"
-              value="${p.max_threshold || 0}" min="0" title="Max threshold for ${escapeHtml(p.name)}">
+              value="${maxVal}" min="0" placeholder="0" title="Max threshold for ${escapeHtml(p.name)}">
           </td>
           <td>
             <label class="enforced-switch" title="Toggle individual enforcement">
-              <input type="checkbox" id="enf-${p.id}" ${p.is_enforced ? 'checked' : ''}>
+              <input type="checkbox" id="enf-${p.id}" ${isEnf ? 'checked' : ''}>
               <span class="enforced-slider"></span>
             </label>
           </td>
           <td>
-            <button class="thresh-save-btn" onclick="saveProductThreshold('${p.id}')">
+            <button class="thresh-save-btn" onclick="saveProductThreshold('${escapeHtml(p.id)}')">
               <i data-lucide="save" class="lucide-icon" style="width:12px;height:12px;"></i> Save
             </button>
           </td>
@@ -4405,21 +4592,58 @@ window.saveProductThreshold = async function (prodId) {
   minInput.classList.remove('invalid');
   maxInput.classList.remove('invalid');
 
+  const cached = (thresholdProducts || []).find(p => p.id === prodId);
+  const branchId = cached ? (cached.branchId || cached.branch_id || cached.branch) : undefined;
+
+  const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const payload = {
+    min_threshold: min,
+    max_threshold: max,
+    is_enforced: enf,
+    ...(branchId ? { branchId } : {})
+  };
+
   try {
-    const res = await fetch(`${API_URL}/threshold/products/${prodId}`, {
+    let res = await fetch(`${API_URL}/threshold/products/${encodeURIComponent(prodId)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ min_threshold: min, max_threshold: max, is_enforced: enf })
+      headers,
+      body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+    if (!res.ok) {
+      // Fallback: If /api/threshold/products/:id returned non-200, try /api/inventory/:id
+      res = await fetch(`${API_URL}/inventory/${encodeURIComponent(prodId)}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
+    }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || (errData.details && errData.details.join(', ')) || 'Save failed');
+    }
 
     // Sync local cache
-    const cached = thresholdProducts.find(p => p.id === prodId);
-    if (cached) { cached.min_threshold = min; cached.max_threshold = max; cached.is_enforced = enf; }
+    if (cached) {
+      cached.min_threshold = min;
+      cached.max_threshold = max;
+      cached.is_enforced = enf;
+    }
+    const appProd = (appProducts || []).find(p => p.id === prodId);
+    if (appProd) {
+      appProd.min_threshold = min;
+      appProd.max_threshold = max;
+      appProd.is_enforced = enf;
+    }
 
     showToast('success', 'Thresholds Saved', `Thresholds updated for product ${prodId}.`);
     await loadAuditLog();
   } catch (err) {
+    console.error('[Threshold] Error saving thresholds:', err);
     showToast('error', 'Save Failed', err.message || 'Could not save thresholds.');
   }
 };
