@@ -2585,10 +2585,52 @@ function setupStockIn() {
           await fetch(`${API_URL}/inventory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
           appProducts.push(productPayload);
         } else {
-          await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+          const siRes = await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+          if (!siRes.ok) {
+            const errData = await siRes.json().catch(() => ({}));
+            // ── THRESHOLD GOVERNANCE: Max-Capacity Block ──────────────────────
+            if (errData.error === 'MAX_THRESHOLD_EXCEEDED' || errData.status === 'BLOCKED') {
+              // Remove confirm modal immediately
+              const confirmMod = document.getElementById('stock-in-confirm');
+              if (confirmMod) confirmMod.style.display = 'none';
+              // Inject or update blocked alert banner
+              let alertBanner = document.getElementById('si-blocked-alert');
+              if (!alertBanner) {
+                alertBanner = document.createElement('div');
+                alertBanner.id = 'si-blocked-alert';
+                alertBanner.className = 'threshold-blocked-alert';
+                const mainContent = document.querySelector('.main-content');
+                const twoCol = document.querySelector('.two-column');
+                if (mainContent && twoCol) mainContent.insertBefore(alertBanner, twoCol);
+              }
+              alertBanner.innerHTML = `
+                <div class="tba-icon"><i data-lucide="shield-x" class="lucide-icon" style="width:22px;height:22px;"></i></div>
+                <div class="tba-body">
+                  <div class="tba-title">Stock-In Blocked — Max Capacity Exceeded</div>
+                  <div class="tba-msg">${escapeHtml(errData.message || 'Transaction blocked by threshold governance.')}</div>
+                  <a href="threshold.html" class="tba-cta">
+                    <i data-lucide="sliders" class="lucide-icon" style="width:13px;height:13px;"></i>
+                    Go to Threshold Management
+                  </a>
+                </div>
+              `;
+              alertBanner.style.display = 'flex';
+              alertBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              if (window.lucide) window.lucide.createIcons({ root: alertBanner });
+              siSubmitting = false;
+              if (submitBtn) submitBtn.disabled = false;
+              return;
+            }
+            // Re-throw other errors to be caught by outer catch
+            throw errData;
+          }
           appProducts[existingIndex].quantity += qty;
           appProducts[existingIndex].user = shortName;
         }
+
+        // Clear any previous blocked alert on success
+        const prevAlert = document.getElementById('si-blocked-alert');
+        if (prevAlert) prevAlert.style.display = 'none';
 
         await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
         appTxns.push(txnPayload);
@@ -2857,7 +2899,18 @@ function setupStockOut() {
         const soRes = await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: negativeQty }) });
         if (!soRes.ok) {
           const errData = await soRes.json().catch(() => ({}));
-          throw errData;
+
+          // ── THRESHOLD GOVERNANCE: Critical Low Stock Warning ──────────────
+          // The server logged the CRITICAL_LOW_STOCK event; display it here as a banner
+          if (errData.error === 'CRITICAL_LOW_STOCK') {
+            // Show warning toast but don't block (server allowed the transaction)
+            showToast('warning', 'Critical Low Stock Alert',
+              `${prod.name} is now below its minimum safety reserve. An alert has been logged for the Admin.`,
+              7000
+            );
+          } else {
+            throw errData;
+          }
         }
         prod.quantity -= qty;
 
@@ -3239,6 +3292,7 @@ function setupCommandPalette() {
     { label: "Stock In Items", icon: "package-plus", action: () => window.location.href = "stock-in.html" },
     { label: "Stock Out Items", icon: "package-minus", action: () => window.location.href = "stock-out.html" },
     { label: "Go to Transactions", icon: "clipboard-list", action: () => window.location.href = "transactions.html" },
+    { label: "Stock Threshold Governance", icon: "sliders", action: () => window.location.href = "threshold.html" },
     { label: "User Management (Admin)", icon: "users", action: () => window.location.href = "users.html", adminOnly: true },
     { label: "Log Out", icon: "log-out", action: () => { if (typeof confirmLogout === 'function') confirmLogout(); else window.location.href = 'index.html'; } }
   ];
@@ -4004,6 +4058,553 @@ window.openWidgetFullscreen = function (cardId) {
   modal.addEventListener('mousedown', clickHandler);
 };
 
+// =============================================
+//  THRESHOLD GOVERNANCE MODULE
+// =============================================
+
+// ── State ────────────────────────────────────────────────────────────────────
+let thresholdProducts = []; // all products with threshold fields
+let thresholdRequests = []; // all requests (filtered by role)
+let govCurrentPage   = 1;
+const GOV_PAGE_SIZE  = 15;
+
+function setupThreshold() {
+  const role = getUserRole();
+  // Panels are shown/hidden via CSS (is-admin class on body), but we also
+  // explicitly show the right one so JS logic can run safely.
+  const adminPanel = document.getElementById('admin-threshold-panel');
+  const empPanel   = document.getElementById('employee-threshold-panel');
+
+  if (role === 'admin') {
+    if (adminPanel)  adminPanel.style.display  = 'block';
+    if (empPanel)    empPanel.style.display     = 'none';
+    setupThresholdAdmin();
+  } else {
+    if (adminPanel)  adminPanel.style.display  = 'none';
+    if (empPanel)    empPanel.style.display     = 'block';
+    setupThresholdEmployee();
+  }
+
+  // Both roles see the enforcement status badge
+  loadThresholdSettings();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SHARED: Load global enforcement state
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadThresholdSettings() {
+  try {
+    const res = await fetch(`${API_URL}/threshold/settings`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const isOn = !!data.global_threshold_enforcement;
+
+    // Update all enforcement badges on the page
+    ['global-status-badge', 'emp-global-status-badge'].forEach(id => {
+      const badge = document.getElementById(id);
+      if (!badge) return;
+      badge.className = `enforcement-status-badge ${isOn ? 'on' : 'off'}`;
+      badge.innerHTML = isOn
+        ? `<i data-lucide="shield-check" class="lucide-icon" style="width:10px;height:10px;"></i> Active`
+        : `<i data-lucide="x-circle" class="lucide-icon" style="width:10px;height:10px;"></i> Inactive`;
+    });
+
+    // Update master card border
+    const masterCard = document.getElementById('master-switch-card');
+    if (masterCard) {
+      masterCard.classList.toggle('enforcement-on',  isOn);
+      masterCard.classList.toggle('enforcement-off', !isOn);
+    }
+
+    // Sync the toggle input state
+    const toggle = document.getElementById('toggle-global-enforcement');
+    if (toggle) toggle.checked = isOn;
+
+    // Employee read-only description
+    const empDesc = document.getElementById('emp-enforcement-desc');
+    if (empDesc) {
+      empDesc.textContent = isOn
+        ? 'Enforcement is ACTIVE. Stock-In transactions that exceed product max thresholds will be blocked. Submit a Limit Expansion Request if you need higher capacity.'
+        : 'Enforcement is currently INACTIVE. Threshold limits are in monitoring mode only — transactions proceed normally.';
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    console.warn('[Threshold] Could not load settings:', err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ADMIN: Setup
+// ─────────────────────────────────────────────────────────────────────────────
+async function setupThresholdAdmin() {
+  // Wire global enforcement toggle
+  const toggle = document.getElementById('toggle-global-enforcement');
+  if (toggle) {
+    toggle.addEventListener('change', async () => {
+      const newVal = toggle.checked;
+      try {
+        await fetch(`${API_URL}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'global_threshold_enforcement', value: String(newVal) })
+        });
+        showToast(
+          newVal ? 'success' : 'warning',
+          `Global Enforcement ${newVal ? 'Activated' : 'Deactivated'}`,
+          newVal
+            ? 'Threshold enforcement is now ACTIVE across all enforced products.'
+            : 'Threshold enforcement is now INACTIVE. All transactions proceed in soft-monitoring mode.'
+        );
+        // Refresh badges / card state
+        loadThresholdSettings();
+      } catch (err) {
+        showToast('error', 'Save Failed', 'Could not update global enforcement setting.');
+        // Revert toggle on error
+        toggle.checked = !newVal;
+      }
+    });
+  }
+
+  // Populate branch filter
+  const branchSel = document.getElementById('thresh-branch-filter');
+  if (branchSel && appBranches.length) {
+    const opts = appBranches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    branchSel.innerHTML = `<option value="all">All Branches</option>${opts}`;
+  }
+
+  // Load pending requests
+  await loadPendingRequests();
+
+  // Load products governance table
+  await loadGovernanceProducts();
+
+  // Load audit log
+  await loadAuditLog();
+
+  // Wire search + branch filter
+  document.getElementById('thresh-product-search')?.addEventListener('input', () => renderGovernanceTable());
+  document.getElementById('thresh-branch-filter')?.addEventListener('change', () => renderGovernanceTable());
+
+  // Wire reject reason modal
+  const rejectModal = document.getElementById('reject-reason-modal');
+  if (rejectModal) {
+    document.getElementById('reject-reason-cancel').onclick = () => rejectModal.style.display = 'none';
+    rejectModal.onclick = (e) => { if (e.target === rejectModal) rejectModal.style.display = 'none'; };
+  }
+}
+
+// Load all expansion requests (admin sees all statuses for pending tab; all combined)
+async function loadPendingRequests() {
+  const tbody = document.getElementById('pending-requests-body');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/threshold/requests`);
+    const all = res.ok ? await res.json() : [];
+    thresholdRequests = all;
+
+    const pending = all.filter(r => r.status === 'PENDING');
+
+    // Update pending count badge
+    const badge = document.getElementById('pending-count-badge');
+    if (badge) {
+      badge.style.display = pending.length > 0 ? 'inline-flex' : 'none';
+      badge.textContent   = `${pending.length} pending`;
+      badge.className     = `enforcement-status-badge ${pending.length > 0 ? 'off' : 'on'}`;
+    }
+
+    if (pending.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="thr-empty-state"><i data-lucide="inbox" class="lucide-icon"></i><div>No pending requests. All expansion requests are up to date.</div></div></td></tr>`;
+      if (window.lucide) window.lucide.createIcons({ root: tbody });
+      return;
+    }
+
+    tbody.innerHTML = pending.map(r => `
+      <tr data-reqid="${r.id}">
+        <td><code style="font-size:12px;">${escapeHtml(r.id)}</code></td>
+        <td>${escapeHtml(branchName(r.branchId))}</td>
+        <td><strong>${escapeHtml(r.productName)}</strong></td>
+        <td>${r.currentMax > 0 ? r.currentMax : '<span style="color:var(--slate-400);">Not set</span>'}</td>
+        <td><strong style="color:var(--blue-600);">${r.requestedMax}</strong></td>
+        <td style="max-width:180px;white-space:normal;font-size:12.5px;color:var(--slate-600);">${escapeHtml(r.reason || '—')}</td>
+        <td style="white-space:nowrap;font-size:12px;color:var(--slate-500);">${r.submittedAt ? new Date(r.submittedAt).toLocaleDateString() : '—'}</td>
+        <td style="white-space:nowrap;">
+          <button class="approve-btn" onclick="approveRequest('${r.id}')">
+            <i data-lucide="check" class="lucide-icon" style="width:12px;height:12px;"></i> Approve
+          </button>
+          <button class="reject-btn" onclick="openRejectModal('${r.id}')">
+            <i data-lucide="x" class="lucide-icon" style="width:12px;height:12px;"></i> Reject
+          </button>
+        </td>
+      </tr>
+    `).join('');
+    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  } catch (err) {
+    console.error('[Threshold] Failed to load requests:', err);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red-600);padding:20px;">Failed to load requests.</td></tr>`;
+  }
+}
+
+// Approve a pending request
+window.approveRequest = async function (reqId) {
+  showConfirmModal(
+    'Approve Expansion Request',
+    `Approve request ${reqId}? This will immediately update the product's max threshold.`,
+    async () => {
+      try {
+        const res = await fetch(`${API_URL}/threshold/requests/${reqId}/approve`, { method: 'PUT' });
+        if (!res.ok) throw new Error((await res.json()).error || 'Approve failed');
+        showToast('success', 'Request Approved', `Request ${reqId} approved. Max threshold updated immediately.`);
+        await loadPendingRequests();
+        await loadGovernanceProducts(); // Sync the governance table
+        await loadAuditLog();
+      } catch (err) {
+        showToast('error', 'Approve Failed', err.message || 'Could not approve request.');
+      }
+    }
+  );
+};
+
+// Open reject reason modal
+let _pendingRejectId = null;
+window.openRejectModal = function (reqId) {
+  _pendingRejectId = reqId;
+  const modal = document.getElementById('reject-reason-modal');
+  const input = document.getElementById('reject-reason-input');
+  const errEl = document.getElementById('reject-reason-err');
+  const group = document.getElementById('reject-reason-group');
+  if (!modal) return;
+  if (input) input.value = '';
+  if (errEl) errEl.style.display = 'none';
+  if (group) group.classList.remove('has-error');
+  modal.style.display = 'flex';
+  if (window.lucide) window.lucide.createIcons({ root: modal });
+
+  document.getElementById('reject-reason-confirm').onclick = async () => {
+    const reason = input ? input.value.trim() : '';
+    if (!reason) {
+      if (group) group.classList.add('has-error');
+      if (errEl) errEl.style.display = 'block';
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/threshold/requests/${_pendingRejectId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rejectReason: reason })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Reject failed');
+      modal.style.display = 'none';
+      showToast('info', 'Request Rejected', `Request ${_pendingRejectId} rejected. Reason logged.`);
+      await loadPendingRequests();
+      await loadAuditLog();
+    } catch (err) {
+      showToast('error', 'Reject Failed', err.message || 'Could not reject request.');
+    }
+    _pendingRejectId = null;
+  };
+};
+
+// Load all products with threshold config
+async function loadGovernanceProducts() {
+  try {
+    const res = await fetch(`${API_URL}/threshold/products`);
+    thresholdProducts = res.ok ? await res.json() : [];
+    govCurrentPage = 1;
+    renderGovernanceTable();
+  } catch (err) {
+    console.error('[Threshold] Failed to load products:', err);
+  }
+}
+
+function renderGovernanceTable() {
+  const tbody = document.getElementById('governance-products-body');
+  if (!tbody) return;
+
+  const searchQ  = (document.getElementById('thresh-product-search')?.value || '').toLowerCase();
+  const branchSel = document.getElementById('thresh-branch-filter')?.value || 'all';
+
+  let filtered = thresholdProducts;
+  if (searchQ)           filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQ) || p.category.toLowerCase().includes(searchQ));
+  if (branchSel !== 'all') filtered = filtered.filter(p => p.branchId === branchSel);
+
+  const totalPages = Math.ceil(filtered.length / GOV_PAGE_SIZE) || 1;
+  if (govCurrentPage > totalPages) govCurrentPage = totalPages;
+  const start    = (govCurrentPage - 1) * GOV_PAGE_SIZE;
+  const paginated = filtered.slice(start, start + GOV_PAGE_SIZE);
+
+  if (paginated.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="thr-empty-state"><i data-lucide="package-search" class="lucide-icon"></i><div>No products match your filter.</div></div></td></tr>`;
+    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  } else {
+    tbody.innerHTML = paginated.map(p => {
+      const stockColor = p.max_threshold > 0 && p.quantity > p.max_threshold ? 'var(--red-600)'
+                       : p.min_threshold > 0 && p.quantity < p.min_threshold ? 'var(--amber-500)'
+                       : 'inherit';
+      return `
+        <tr data-prodid="${p.id}">
+          <td><strong>${escapeHtml(p.name)}</strong></td>
+          <td style="font-size:12px;">${escapeHtml(branchName(p.branchId))}</td>
+          <td>${categoryBadge(p.category)}</td>
+          <td style="font-weight:700;color:${stockColor};">${p.quantity}</td>
+          <td>
+            <input type="number" class="thresh-input" id="min-${p.id}"
+              value="${p.min_threshold || 0}" min="0" title="Min threshold for ${escapeHtml(p.name)}">
+          </td>
+          <td>
+            <input type="number" class="thresh-input" id="max-${p.id}"
+              value="${p.max_threshold || 0}" min="0" title="Max threshold for ${escapeHtml(p.name)}">
+          </td>
+          <td>
+            <label class="enforced-switch" title="Toggle individual enforcement">
+              <input type="checkbox" id="enf-${p.id}" ${p.is_enforced ? 'checked' : ''}>
+              <span class="enforced-slider"></span>
+            </label>
+          </td>
+          <td>
+            <button class="thresh-save-btn" onclick="saveProductThreshold('${p.id}')">
+              <i data-lucide="save" class="lucide-icon" style="width:12px;height:12px;"></i> Save
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  }
+
+  // Pagination controls
+  const pageInfo = document.getElementById('gov-page-info');
+  const prevBtn  = document.getElementById('gov-prev');
+  const nextBtn  = document.getElementById('gov-next');
+  if (pageInfo) pageInfo.textContent = `Page ${govCurrentPage} of ${totalPages} (${filtered.length} products)`;
+  if (prevBtn) {
+    prevBtn.disabled = govCurrentPage <= 1;
+    prevBtn.onclick  = () => { if (govCurrentPage > 1) { govCurrentPage--; renderGovernanceTable(); } };
+  }
+  if (nextBtn) {
+    nextBtn.disabled = govCurrentPage >= totalPages;
+    nextBtn.onclick  = () => { if (govCurrentPage < totalPages) { govCurrentPage++; renderGovernanceTable(); } };
+  }
+}
+
+// Save individual product threshold
+window.saveProductThreshold = async function (prodId) {
+  const minInput = document.getElementById(`min-${prodId}`);
+  const maxInput = document.getElementById(`max-${prodId}`);
+  const enfInput = document.getElementById(`enf-${prodId}`);
+  if (!minInput || !maxInput || !enfInput) return;
+
+  const min = parseInt(minInput.value, 10);
+  const max = parseInt(maxInput.value, 10);
+  const enf = enfInput.checked;
+
+  // Client-side validation
+  if (isNaN(min) || min < 0) { minInput.classList.add('invalid'); showToast('error', 'Invalid Min', 'Min threshold must be 0 or greater.'); return; }
+  if (isNaN(max) || max < 0) { maxInput.classList.add('invalid'); showToast('error', 'Invalid Max', 'Max threshold must be 0 or greater.'); return; }
+  if (max > 0 && min > max)  { minInput.classList.add('invalid'); showToast('error', 'Invalid Thresholds', 'Min threshold cannot exceed Max threshold.'); return; }
+  minInput.classList.remove('invalid');
+  maxInput.classList.remove('invalid');
+
+  try {
+    const res = await fetch(`${API_URL}/threshold/products/${prodId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ min_threshold: min, max_threshold: max, is_enforced: enf })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+
+    // Sync local cache
+    const cached = thresholdProducts.find(p => p.id === prodId);
+    if (cached) { cached.min_threshold = min; cached.max_threshold = max; cached.is_enforced = enf; }
+
+    showToast('success', 'Thresholds Saved', `Thresholds updated for product ${prodId}.`);
+    await loadAuditLog();
+  } catch (err) {
+    showToast('error', 'Save Failed', err.message || 'Could not save thresholds.');
+  }
+};
+
+// Load audit trail
+async function loadAuditLog() {
+  const tbody = document.getElementById('audit-log-body');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API_URL}/threshold/audit`);
+    const entries = res.ok ? await res.json() : [];
+    const recent  = entries.slice(0, 20);
+
+    if (recent.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="thr-empty-state"><i data-lucide="file-clock" class="lucide-icon"></i><div>No governance events recorded yet.</div></div></td></tr>`;
+      if (window.lucide) window.lucide.createIcons({ root: tbody });
+      return;
+    }
+
+    const eventLabel = (e) => {
+      const map = {
+        STOCK_IN_BLOCKED_MAX_THRESHOLD: { cls: 'block',   label: 'Stock-In Blocked' },
+        NEGATIVE_BALANCE_PREVENTED:     { cls: 'block',   label: 'Zero-Balance Block' },
+        CRITICAL_LOW_STOCK:             { cls: 'low',     label: 'Critical Low Stock' },
+        THRESHOLD_CONFIG_UPDATED:       { cls: 'config',  label: 'Config Updated' },
+        EXPANSION_REQUEST_APPROVED:     { cls: 'approve', label: 'Request Approved' },
+        EXPANSION_REQUEST_REJECTED:     { cls: 'reject',  label: 'Request Rejected' },
+        GLOBAL_ENFORCEMENT_TOGGLED:     { cls: 'toggle',  label: 'Enforcement Toggled' },
+      };
+      return map[e] || { cls: 'config', label: e };
+    };
+
+    tbody.innerHTML = recent.map(entry => {
+      const { cls, label } = eventLabel(entry.event);
+      const detail = entry.productName
+        ? `${escapeHtml(entry.productName)}${entry.attempted ? ` (tried: ${entry.attempted})` : entry.newMax ? ` → max: ${entry.newMax}` : ''}`
+        : entry.rejectReason ? `Reason: ${escapeHtml(entry.rejectReason.substring(0, 40))}…` : '—';
+      const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—';
+      return `<tr>
+        <td style="font-size:12px;white-space:nowrap;">${ts}</td>
+        <td><span class="audit-event-pill ${cls}">${label}</span></td>
+        <td style="font-size:12.5px;max-width:200px;">${detail}</td>
+        <td style="font-size:12px;">${escapeHtml(branchName(entry.branchId))}</td>
+        <td style="font-size:12px;font-family:monospace;">${escapeHtml(entry.actor || '—')}</td>
+      </tr>`;
+    }).join('');
+    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  } catch (err) {
+    console.error('[Threshold] Failed to load audit log:', err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EMPLOYEE: Setup
+// ─────────────────────────────────────────────────────────────────────────────
+async function setupThresholdEmployee() {
+  // Populate product dropdown from the employee's branch
+  const sel = document.getElementById('product-select');
+  if (sel && appProducts.length) {
+    sel.innerHTML = `<option value="">Select a product from your branch…</option>` +
+      appProducts.map(p => `<option value="${p.id}" data-min="${p.min_threshold || 0}" data-max="${p.max_threshold || 0}" data-qty="${p.quantity}" data-unit="${escapeHtml(p.unit)}">${escapeHtml(p.name)} (${p.quantity} ${p.unit})</option>`).join('');
+  }
+
+  // Show live threshold preview when a product is selected
+  sel?.addEventListener('change', () => {
+    const opt = sel.options[sel.selectedIndex];
+    const preview = document.getElementById('product-threshold-preview');
+    if (!opt.value || !preview) { if (preview) preview.style.display = 'none'; return; }
+    document.getElementById('prev-current').textContent = opt.dataset.qty || '0';
+    document.getElementById('prev-min').textContent     = opt.dataset.min || 'Not set';
+    document.getElementById('prev-max').textContent     = opt.dataset.max || 'Not set';
+    preview.style.display = 'block';
+  });
+
+  // Handle extension request form submission
+  const form = document.getElementById('extension-request-form');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById('btn-submit-request');
+
+      // Clear prior errors
+      ['fg-product','fg-requested-max','fg-reason'].forEach(id => {
+        document.getElementById(id)?.classList.remove('has-error');
+      });
+      ['err-product','err-requested-max','err-reason'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+
+      const productId    = document.getElementById('product-select').value;
+      const requestedMax = parseInt(document.getElementById('requested-max').value, 10);
+      const reason       = document.getElementById('request-reason').value.trim();
+      const selEl        = document.getElementById('product-select');
+      const currentMax   = parseInt(selEl.options[selEl.selectedIndex]?.dataset?.max || '0', 10);
+
+      let valid = true;
+      if (!productId) {
+        document.getElementById('fg-product')?.classList.add('has-error');
+        const err = document.getElementById('err-product'); if (err) err.style.display = 'block';
+        valid = false;
+      }
+      if (isNaN(requestedMax) || requestedMax <= 0) {
+        document.getElementById('fg-requested-max')?.classList.add('has-error');
+        const err = document.getElementById('err-requested-max');
+        if (err) { err.textContent = 'Please enter a valid quantity greater than 0.'; err.style.display = 'block'; }
+        valid = false;
+      } else if (requestedMax <= currentMax) {
+        document.getElementById('fg-requested-max')?.classList.add('has-error');
+        const err = document.getElementById('err-requested-max');
+        if (err) { err.textContent = `Requested max (${requestedMax}) must exceed current max threshold (${currentMax}).`; err.style.display = 'block'; }
+        valid = false;
+      }
+      if (!reason) {
+        document.getElementById('fg-reason')?.classList.add('has-error');
+        const err = document.getElementById('err-reason'); if (err) err.style.display = 'block';
+        valid = false;
+      }
+      if (!valid) return;
+
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i data-lucide="loader" class="lucide-icon"></i> Submitting...'; if (window.lucide) window.lucide.createIcons({ root: submitBtn }); }
+
+      try {
+        const res = await fetch(`${API_URL}/threshold/requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId, requestedMax, reason })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data.details || [data.error]).join(', '));
+
+        showToast('success', 'Request Submitted', `Limit expansion request ${data.id} submitted. Admin will review shortly.`, 6000);
+        form.reset();
+        const preview = document.getElementById('product-threshold-preview');
+        if (preview) preview.style.display = 'none';
+        // Refresh history table
+        await loadEmployeeHistory();
+      } catch (err) {
+        showToast('error', 'Submission Failed', err.message || 'Could not submit request.');
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i data-lucide="send" class="lucide-icon"></i> Submit Request'; if (window.lucide) window.lucide.createIcons({ root: submitBtn }); }
+      }
+    });
+  }
+
+  // Load request history
+  await loadEmployeeHistory();
+}
+
+async function loadEmployeeHistory() {
+  const tbody = document.getElementById('employee-history-body');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API_URL}/threshold/requests`);
+    const all = res.ok ? await res.json() : [];
+
+    if (all.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="thr-empty-state"><i data-lucide="history" class="lucide-icon"></i><div>No requests submitted yet.</div></div></td></tr>`;
+      if (window.lucide) window.lucide.createIcons({ root: tbody });
+      return;
+    }
+
+    tbody.innerHTML = all.map(r => {
+      const statusClass = r.status === 'PENDING' ? 'pending' : r.status === 'APPROVED' ? 'approved' : 'rejected';
+      const statusIcon  = r.status === 'PENDING' ? 'clock' : r.status === 'APPROVED' ? 'check-circle' : 'x-circle';
+      const notes = r.status === 'REJECTED' && r.rejectReason
+        ? `<span style="font-size:11.5px;color:var(--red-600);">Rejected: ${escapeHtml(r.rejectReason)}</span>`
+        : r.status === 'APPROVED'
+        ? `<span style="font-size:11.5px;color:var(--green-600);">Max updated to ${r.requestedMax}</span>`
+        : '<span style="color:var(--slate-400);font-size:12px;">Awaiting review</span>';
+      return `<tr>
+        <td><code style="font-size:12px;">${escapeHtml(r.id)}</code></td>
+        <td style="font-size:13px;">${escapeHtml(r.productName)}</td>
+        <td style="font-weight:700;">${r.requestedMax}</td>
+        <td><span class="req-status-badge ${statusClass}"><i data-lucide="${statusIcon}" class="lucide-icon" style="width:10px;height:10px;"></i> ${r.status}</span></td>
+        <td style="font-size:12px;white-space:nowrap;">${r.submittedAt ? new Date(r.submittedAt).toLocaleDateString() : '—'}</td>
+        <td>${notes}</td>
+      </tr>`;
+    }).join('');
+    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  } catch (err) {
+    console.error('[Threshold] Failed to load employee history:', err);
+  }
+}
+
 window.closeWidgetFullscreen = function () {
   const modal = document.getElementById('widget-fullscreen-modal');
   if (modal) modal.style.display = 'none';
@@ -4127,4 +4728,5 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (page === "stock-out.html") setupStockOut();
   if (page === "transactions.html") { loadTransactions(); setupTransactionFilters(); }
   if (page === "users.html" && userRole === "admin") { loadUsers(); setupUserManagement(); }
+  if (page === "threshold.html") setupThreshold();
 });
