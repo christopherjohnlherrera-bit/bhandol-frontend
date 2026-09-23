@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bhandol Hardware | System Utilities</title>
+    <meta name="description" content="System maintenance utilities and operational tools for Bhandol Hardware.">
+    <link rel="stylesheet" href="assets/css/style.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+    <!-- WELCOME MODAL -->
+    <div id="welcome-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-modal">&times;</span>
+            <h2 id="modal-title"></h2>
+            <p id="modal-subtitle"></p>
+        </div>
+    </div>
+
+    <!-- LOGOUT CONFIRMATION MODAL -->
+    <div id="logout-modal" class="modal">
+        <div class="modal-content">
+            <h2>Confirm Logout</h2>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button id="logout-yes" class="primary-btn">Yes, Logout</button>
+                <button id="logout-no" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon"><i data-lucide="wrench" class="lucide-icon"></i></span>
+                    <div>BHANDOL<span class="logo-sub">Hardware System</span></div>
+                </div>
+            </div>
+
+            <nav>
+                <a href="dashboard.html">
+                    <span class="nav-icon"><i data-lucide="layout-dashboard" class="lucide-icon"></i></span> Dashboard
+                </a>
+                <a href="inventory.html">
+                    <span class="nav-icon"><i data-lucide="package" class="lucide-icon"></i></span> Inventory
+                </a>
+                <div class="nav-divider"></div>
+                <a href="stock-in.html">
+                    <span class="nav-icon"><i data-lucide="package-plus" class="lucide-icon"></i></span> Stock In
+                </a>
+                <a href="stock-out.html">
+                    <span class="nav-icon"><i data-lucide="package-minus" class="lucide-icon"></i></span> Stock Out
+                </a>
+                <div class="nav-divider"></div>
+                <a href="transactions.html">
+                    <span class="nav-icon"><i data-lucide="clipboard-list" class="lucide-icon"></i></span> Transactions
+                </a>
+                <a href="threshold.html">
+                    <span class="nav-icon"><i data-lucide="sliders" class="lucide-icon"></i></span> Thresholds
+                </a>
+                <a href="users.html" class="admin-only">
+                    <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
+                </a>
+                <a href="settings.html" class="admin-only">
+                    <span class="nav-icon"><i data-lucide="settings" class="lucide-icon"></i></span> Settings
+                </a>
+            </nav>
+
+            <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+                <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon"
+                        style="width:14px;height:14px;"></i> Dark Mode</span>
+                <div class="theme-switch"></div>
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="btn-logout" title="Sign out of your session">
+                    <i data-lucide="log-out" class="lucide-icon"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+
+            <!-- TOPBAR -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <div class="branch-indicator" id="branch-indicator" style="display:none;">
+                        <i data-lucide="map-pin" class="lucide-icon"></i>
+                        <span id="branch-indicator-text"></span>
+                    </div>
+                    <div id="branch-switcher-container" style="display:none;"></div>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="user-badge" id="userBadge">
+                        <div class="user-avatar" id="userAvatar">A</div>
+                        <div class="user-info">
+                            <span class="user-name" id="displayName">Administrator</span>
+                            <span class="user-role" id="displayRole">Admin</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="page-body" style="padding: 28px 32px; max-width: 1200px;">
+
+                <div style="margin-bottom: 24px;">
+                    <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 6px 0; color: var(--slate-800);">System Utilities</h1>
+                    <p style="font-size: 14px; color: var(--slate-500); margin: 0;">
+                        Operational shortcuts, system tools, and administrative utilities.
+                    </p>
+                </div>
+
+                <!-- SETTINGS & BACKUP REDIRECT CARD -->
+                <div class="card admin-only" style="margin-bottom: 24px; border-left: 4px solid var(--blue-600);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h3 style="margin: 0 0 4px 0; font-size: 16px; color: var(--slate-800); display: flex; align-items: center; gap: 8px;">
+                                <i data-lucide="database" class="lucide-icon" style="color: var(--blue-600);"></i> Data Backup & System Settings
+                            </h3>
+                            <p style="margin: 0; font-size: 13.5px; color: var(--slate-500);">
+                                Branch-scoped JSON backup downloads, restoration safety controls, and system preferences are located in the dedicated Settings module.
+                            </p>
+                        </div>
+                        <a href="settings.html" class="primary-btn" style="width: auto; text-decoration: none; padding: 9px 18px; font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px;">
+                            Open System Settings <i data-lucide="arrow-right" class="lucide-icon" style="width: 15px; height: 15px;"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- GOVERNANCE REDIRECT CARD -->
+                <div class="card" style="border-left: 4px solid var(--amber-500);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h3 style="margin: 0 0 4px 0; font-size: 15px; color: var(--slate-800); display: flex; align-items: center; gap: 8px;">
+                                <i data-lucide="sliders" class="lucide-icon" style="color: var(--amber-500); width: 16px; height: 16px;"></i>
+                                Stock Thresholds & Governance Controls
+                            </h3>
+                            <p style="margin: 0; font-size: 13px; color: var(--slate-500);">
+                                Per-product Min/Max threshold enforcement, custom alert levels, and expansion requests are managed in the dedicated Thresholds module.
+                            </p>
+                        </div>
+                        <a href="threshold.html" class="primary-btn" style="width: auto; text-decoration: none; padding: 8px 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                            Open Threshold Governance <i data-lucide="arrow-right" class="lucide-icon" style="width: 14px; height: 14px;"></i>
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+
+    <script src="assets/js/app.js"></script>
+    <script>
+        if (window.lucide) window.lucide.createIcons();
+    </script>
+</body>
+
+</html>

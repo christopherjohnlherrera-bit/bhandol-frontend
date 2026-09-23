@@ -81,6 +81,9 @@
         <a href="users.html" class="admin-only">
           <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
         </a>
+        <a href="settings.html" class="admin-only">
+          <span class="nav-icon"><i data-lucide="settings" class="lucide-icon"></i></span> Settings
+        </a>
       </nav>
 
       <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
@@ -211,21 +214,6 @@
         </div>
       </div>
 
-      <!-- SETTINGS PANEL: Data Backup (Admin Only) -->
-      <div class="card admin-only" id="system-tools-card" style="margin-bottom: 24px;">
-        <h2 style="margin-bottom: 4px;"><i data-lucide="database" class="lucide-icon"></i> Data Backup</h2>
-        <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-          Download a full snapshot of your data (users, products, transactions), or restore from a backup file.
-        </p>
-        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-          <button class="primary-btn" id="btn-download-backup" style="width: auto;"><i data-lucide="download"
-              class="lucide-icon"></i> Download Backup (.json)</button>
-          <button class="secondary-btn" id="btn-restore-backup" style="width: auto;"><i data-lucide="upload"
-              class="lucide-icon"></i> Restore Backup</button>
-          <input type="file" id="restore-file-input" accept=".json" style="display: none;">
-        </div>
-      </div>
-
       <!-- EXPORT ACTIVITY LOG (Admin Only) -->
       <div class="card admin-only" id="export-log-card" style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -235,20 +223,21 @@
               class="lucide-icon"></i> Clear Display</button>
         </div>
         <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-          Track who exported or printed data from the system.
+          Track who exported or printed data from the system and target branch scope.
         </p>
         <table>
           <thead>
             <tr>
               <th>Date</th>
               <th>Time</th>
+              <th>Branch</th>
               <th>User</th>
               <th>Export Type</th>
             </tr>
           </thead>
           <tbody id="export-log-body">
             <tr>
-              <td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td>
+              <td colspan="5" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td>
             </tr>
           </tbody>
         </table>

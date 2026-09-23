@@ -109,9 +109,15 @@ function getLowStockThreshold() {
   return isNaN(val) || val < 1 ? 8 : val;
 }
 
-// Low Stock Detection: dynamically evaluate against product's configured min_threshold, falling back to default threshold
+// Low Stock Detection: dynamically evaluate against product's configured low_stock_alert or min_threshold, falling back to default threshold
 function isProductLowStock(p) {
   if (!p) return false;
+  if (p.low_stock_alert !== undefined && p.low_stock_alert !== null && p.low_stock_alert !== '') {
+    const alertVal = parseInt(p.low_stock_alert, 10);
+    if (!isNaN(alertVal) && alertVal > 0) {
+      return p.quantity > 0 && p.quantity <= alertVal;
+    }
+  }
   const minVal = (p.min_threshold !== undefined && p.min_threshold !== null && p.min_threshold !== '') ? parseInt(p.min_threshold, 10)
                : (p.min_stock !== undefined && p.min_stock !== null && p.min_stock !== '') ? parseInt(p.min_stock, 10)
                : (p.minStock !== undefined && p.minStock !== null && p.minStock !== '') ? parseInt(p.minStock, 10)
@@ -1472,7 +1478,7 @@ function loadDashboard() {
       fetch(`${API_URL}/export-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: getShortName(), type: "Dashboard PDF", date: getDateStr(), time: getTimeStr() })
+        body: JSON.stringify({ user: getShortName(), type: "Dashboard PDF", date: getDateStr(), time: getTimeStr(), branch: branchName(getAdminBranch()) })
       }).catch(err => console.error("Failed to log PDF export", err));
       showToast('success', 'PDF Export', 'Print dialog opened — choose "Save as PDF" for a PDF file.');
     });
@@ -2104,12 +2110,13 @@ function renderExportLogPage() {
   const pageLogs = exportLogAllLogs.slice(start, start + EXPORT_LOG_PAGE_SIZE);
 
   if (pageLogs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--slate-400);">No exports recorded yet.</td></tr>`;
   } else {
     tbody.innerHTML = pageLogs.map(l => `
       <tr>
         <td>${l.date}</td>
         <td>${l.time}</td>
+        <td>${l.branch || '—'}</td>
         <td>${l.user}</td>
         <td>${l.type}</td>
       </tr>`).join("");
@@ -2186,7 +2193,7 @@ function renderInventoryTable(products) {
   if (products.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align: center; padding: 48px 0;">
+        <td colspan="11" style="text-align: center; padding: 48px 0;">
           <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--slate-400);">
             <i data-lucide="package-search" class="lucide-icon" style="width: 48px; height: 48px; color: var(--slate-300); margin-bottom: 16px;"></i>
             <h3 style="margin: 0 0 8px 0; color: var(--slate-500); font-weight: 500;">No Inventory Found</h3>
@@ -2211,8 +2218,16 @@ function renderInventoryTable(products) {
   const threshold = getLowStockThreshold();
 
   tbody.innerHTML = paginated.map(p => {
-    const status = p.quantity === 0 ? "out-of-stock" : p.quantity <= threshold ? "low-stock" : "in-stock";
-    const label = p.quantity === 0 ? "Out of Stock" : p.quantity <= threshold ? "Low Stock" : "In Stock";
+    const isLow = isProductLowStock(p);
+    const status = p.quantity === 0 ? "out-of-stock" : isLow ? "low-stock" : "in-stock";
+    const label = p.quantity === 0 ? "Out of Stock" : isLow ? "Low Stock" : "In Stock";
+
+    const minDisplay = (p.min_threshold !== undefined && p.min_threshold !== null && Number(p.min_threshold) > 0)
+      ? Number(p.min_threshold)
+      : '<span style="color:var(--slate-400);">—</span>';
+    const maxDisplay = (p.max_threshold !== undefined && p.max_threshold !== null && Number(p.max_threshold) > 0)
+      ? Number(p.max_threshold)
+      : '<span style="color:var(--slate-400);">—</span>';
 
     let actionCol = "";
     if (userRole === "admin") {
@@ -2232,6 +2247,8 @@ function renderInventoryTable(products) {
         <td>${categoryBadge(p.category)}</td>
         <td>${p.unit}</td>
         <td>${p.quantity}</td>
+        <td style="font-size:12px;text-align:center;">${minDisplay}</td>
+        <td style="font-size:12px;text-align:center;">${maxDisplay}</td>
         <td><span class="status ${status}">${label}</span></td>
         <td>${p.dateAdded}</td>
         <td>${p.user}</td>
@@ -2267,7 +2284,7 @@ function setupInventoryFilters() {
     const stock = stockFilter?.value || "";
     if (q) products = products.filter(p => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
     if (cat && cat !== "All Categories") products = products.filter(p => p.category === cat);
-    if (stock === "Low Stock") products = products.filter(p => p.quantity > 0 && p.quantity <= getLowStockThreshold());
+    if (stock === "Low Stock") products = products.filter(p => isProductLowStock(p));
     if (stock === "Out of Stock") products = products.filter(p => p.quantity === 0);
     currentFilteredProducts = products;
     renderInventoryTable(products);
@@ -2277,7 +2294,7 @@ function setupInventoryFilters() {
   catFilter?.addEventListener("change", applyFilters);
   stockFilter?.addEventListener("change", applyFilters);
   exportBtn?.addEventListener("click", () => {
-    exportCSV(currentFilteredProducts || getProducts(), ["id", "name", "category", "unit", "quantity", "dateAdded", "user"], "inventory.csv", "Inventory");
+    exportCSV(currentFilteredProducts || getProducts(), ["id", "name", "category", "unit", "quantity", "min_threshold", "max_threshold", "dateAdded", "user"], "inventory.csv", "Inventory");
     showToast('success', 'Export Complete', 'Inventory data exported as CSV.');
   });
 
@@ -2304,7 +2321,7 @@ function setupInventoryFilters() {
           showToast('success', 'Product Updated', `${payload.name} updated successfully.`);
           closeEditProductModal();
           applyFilters();
-          const low = appProducts.filter(p => p.quantity > 0 && p.quantity <= getLowStockThreshold()).length;
+          const low = appProducts.filter(p => isProductLowStock(p)).length;
           setText("total-items-count", appProducts.length);
           setText("low-stock-count", low);
           // Keep total stock quantity in sync after edit
@@ -3283,7 +3300,8 @@ function exportCSV(data, fields, filename, exportType) {
       user: getShortName(),
       type: exportType,
       date: getDateStr(),
-      time: getTimeStr()
+      time: getTimeStr(),
+      branch: branchName(getAdminBranch())
     };
     fetch(`${API_URL}/export-logs`, {
       method: "POST",
@@ -4370,33 +4388,30 @@ function populateBranchFilter() {
   if (!branchSel.value) branchSel.value = 'all';
 }
 
-// Load all expansion requests (admin sees all statuses for pending tab; all combined)
-async function loadPendingRequests() {
-  const tbody = document.getElementById('pending-requests-body');
+// ── Pending Requests Pagination State ──────────────────────────────────────
+let pendingAllRequests  = [];
+let pendingCurrentPage  = 1;
+const PENDING_PAGE_SIZE = 10;
+
+function renderPendingPage() {
+  const tbody    = document.getElementById('pending-requests-body');
+  const pageInfo = document.getElementById('pending-page-info');
+  const prevBtn  = document.getElementById('pending-prev');
+  const nextBtn  = document.getElementById('pending-next');
   if (!tbody) return;
 
-  try {
-    const res = await fetch(`${API_URL}/threshold/requests`);
-    const all = res.ok ? await res.json() : [];
-    thresholdRequests = all;
+  const totalItems = pendingAllRequests.length;
+  const totalPages = Math.ceil(totalItems / PENDING_PAGE_SIZE) || 1;
+  if (pendingCurrentPage > totalPages) pendingCurrentPage = totalPages;
+  if (pendingCurrentPage < 1)          pendingCurrentPage = 1;
 
-    const pending = all.filter(r => r.status === 'PENDING');
+  const start    = (pendingCurrentPage - 1) * PENDING_PAGE_SIZE;
+  const pageRows = pendingAllRequests.slice(start, start + PENDING_PAGE_SIZE);
 
-    // Update pending count badge
-    const badge = document.getElementById('pending-count-badge');
-    if (badge) {
-      badge.style.display = pending.length > 0 ? 'inline-flex' : 'none';
-      badge.textContent   = `${pending.length} pending`;
-      badge.className     = `enforcement-status-badge ${pending.length > 0 ? 'off' : 'on'}`;
-    }
-
-    if (pending.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8"><div class="thr-empty-state"><i data-lucide="inbox" class="lucide-icon"></i><div>No pending requests. All expansion requests are up to date.</div></div></td></tr>`;
-      if (window.lucide) window.lucide.createIcons({ root: tbody });
-      return;
-    }
-
-    tbody.innerHTML = pending.map(r => `
+  if (pageRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="thr-empty-state"><i data-lucide="inbox" class="lucide-icon"></i><div>No pending requests. All expansion requests are up to date.</div></div></td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows.map(r => `
       <tr data-reqid="${r.id}">
         <td><code style="font-size:12px;">${escapeHtml(r.id)}</code></td>
         <td>${escapeHtml(branchName(r.branchId))}</td>
@@ -4415,7 +4430,44 @@ async function loadPendingRequests() {
         </td>
       </tr>
     `).join('');
-    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  }
+  if (window.lucide) window.lucide.createIcons({ root: tbody });
+
+  if (pageInfo) {
+    pageInfo.textContent = `Page ${totalItems > 0 ? pendingCurrentPage : 1} of ${totalPages} (${totalItems} request${totalItems === 1 ? '' : 's'})`;
+  }
+  if (prevBtn) {
+    prevBtn.disabled = pendingCurrentPage <= 1;
+    prevBtn.onclick  = () => { if (pendingCurrentPage > 1) { pendingCurrentPage--; renderPendingPage(); } };
+  }
+  if (nextBtn) {
+    nextBtn.disabled = pendingCurrentPage >= totalPages || totalItems === 0;
+    nextBtn.onclick  = () => { if (pendingCurrentPage < totalPages) { pendingCurrentPage++; renderPendingPage(); } };
+  }
+}
+
+// Load all expansion requests (admin sees all statuses for pending tab; all combined)
+async function loadPendingRequests() {
+  const tbody = document.getElementById('pending-requests-body');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/threshold/requests`);
+    const all = res.ok ? await res.json() : [];
+    thresholdRequests = all;
+
+    const pending = all.filter(r => r.status === 'PENDING');
+    pendingAllRequests = pending;
+
+    // Update pending count badge
+    const badge = document.getElementById('pending-count-badge');
+    if (badge) {
+      badge.style.display = pending.length > 0 ? 'inline-flex' : 'none';
+      badge.textContent   = `${pending.length} pending`;
+      badge.className     = `enforcement-status-badge ${pending.length > 0 ? 'off' : 'on'}`;
+    }
+
+    renderPendingPage();
   } catch (err) {
     console.error('[Threshold] Failed to load requests:', err);
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red-600);padding:20px;">Failed to load requests.</td></tr>`;
@@ -4635,12 +4687,13 @@ function renderGovernanceTable() {
   const paginated = filtered.slice(start, start + GOV_PAGE_SIZE);
 
   if (paginated.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="thr-empty-state"><i data-lucide="package-search" class="lucide-icon"></i><div>No products match your filter.</div></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="thr-empty-state"><i data-lucide="package-search" class="lucide-icon"></i><div>No products match your filter.</div></div></td></tr>`;
     if (window.lucide) window.lucide.createIcons({ root: tbody });
   } else {
     tbody.innerHTML = paginated.map(p => {
-      const minVal = p.min_threshold !== undefined && p.min_threshold !== null ? p.min_threshold : 0;
-      const maxVal = p.max_threshold !== undefined && p.max_threshold !== null ? p.max_threshold : 0;
+      const minVal   = p.min_threshold   !== undefined && p.min_threshold   !== null ? p.min_threshold   : 0;
+      const maxVal   = p.max_threshold   !== undefined && p.max_threshold   !== null ? p.max_threshold   : 0;
+      const alertVal = p.low_stock_alert !== undefined && p.low_stock_alert !== null ? p.low_stock_alert : '';
       const isEnf = Boolean(p.is_enforced);
 
       const stockColor = maxVal > 0 && p.quantity > maxVal ? 'var(--red-600)'
@@ -4662,6 +4715,10 @@ function renderGovernanceTable() {
           <td class="col-thresh">
             <input type="number" class="thresh-input" id="max-${p.id}"
               value="${maxVal}" min="0" placeholder="0" title="Max threshold for ${escapeHtml(p.name)}">
+          </td>
+          <td class="col-thresh">
+            <input type="number" class="thresh-input" id="alert-${p.id}"
+              value="${alertVal}" min="0" placeholder="—" title="Low stock alert for ${escapeHtml(p.name)}" style="width:64px;">
           </td>
           <td class="col-enforced">
             <label class="enforced-switch" title="Toggle individual enforcement">
@@ -4709,21 +4766,26 @@ function renderGovernanceTable() {
 
 // Save individual product threshold
 window.saveProductThreshold = async function (prodId) {
-  const minInput = document.getElementById(`min-${prodId}`);
-  const maxInput = document.getElementById(`max-${prodId}`);
-  const enfInput = document.getElementById(`enf-${prodId}`);
+  const minInput   = document.getElementById(`min-${prodId}`);
+  const maxInput   = document.getElementById(`max-${prodId}`);
+  const alertInput = document.getElementById(`alert-${prodId}`);
+  const enfInput   = document.getElementById(`enf-${prodId}`);
   if (!minInput || !maxInput || !enfInput) return;
 
   const min = parseInt(minInput.value, 10);
   const max = parseInt(maxInput.value, 10);
   const enf = enfInput.checked;
+  const alertRaw = alertInput ? alertInput.value.trim() : '';
+  const alertVal = alertRaw !== '' ? parseInt(alertRaw, 10) : null;
 
   // Client-side validation
   if (isNaN(min) || min < 0) { minInput.classList.add('invalid'); showToast('error', 'Invalid Min', 'Min threshold must be 0 or greater.'); return; }
   if (isNaN(max) || max < 0) { maxInput.classList.add('invalid'); showToast('error', 'Invalid Max', 'Max threshold must be 0 or greater.'); return; }
   if (max > 0 && min > max)  { minInput.classList.add('invalid'); showToast('error', 'Invalid Thresholds', 'Min threshold cannot exceed Max threshold.'); return; }
+  if (alertVal !== null && (isNaN(alertVal) || alertVal < 0)) { if (alertInput) alertInput.classList.add('invalid'); showToast('error', 'Invalid Alert', 'Low stock alert must be 0 or greater.'); return; }
   minInput.classList.remove('invalid');
   maxInput.classList.remove('invalid');
+  if (alertInput) alertInput.classList.remove('invalid');
 
   const cached = (thresholdProducts || []).find(p => p.id === prodId);
   const branchId = cached ? (cached.branchId || cached.branch_id || cached.branch) : undefined;
@@ -4736,6 +4798,7 @@ window.saveProductThreshold = async function (prodId) {
     min_threshold: min,
     max_threshold: max,
     is_enforced: enf,
+    low_stock_alert: alertVal,
     ...(branchId ? { branchId } : {})
   };
 
@@ -4762,15 +4825,17 @@ window.saveProductThreshold = async function (prodId) {
 
     // Sync local cache
     if (cached) {
-      cached.min_threshold = min;
-      cached.max_threshold = max;
-      cached.is_enforced = enf;
+      cached.min_threshold   = min;
+      cached.max_threshold   = max;
+      cached.is_enforced     = enf;
+      cached.low_stock_alert = alertVal;
     }
     const appProd = (appProducts || []).find(p => p.id === prodId);
     if (appProd) {
-      appProd.min_threshold = min;
-      appProd.max_threshold = max;
-      appProd.is_enforced = enf;
+      appProd.min_threshold   = min;
+      appProd.max_threshold   = max;
+      appProd.is_enforced     = enf;
+      appProd.low_stock_alert = alertVal;
     }
 
     showToast('success', 'Thresholds Saved', `Thresholds updated for product ${prodId}.`);
@@ -4782,35 +4847,44 @@ window.saveProductThreshold = async function (prodId) {
 };
 
 // Load audit trail
-async function loadAuditLog() {
-  const tbody = document.getElementById('audit-log-body');
+// ── Audit Trail Pagination State ─────────────────────────────────────────────
+let auditAllEntries    = [];
+let auditCurrentPage   = 1;
+const AUDIT_PAGE_SIZE  = 10;
+
+function _auditEventLabel(e) {
+  const map = {
+    STOCK_IN_BLOCKED_MAX_THRESHOLD: { cls: 'block',   label: 'Stock-In Blocked' },
+    NEGATIVE_BALANCE_PREVENTED:     { cls: 'block',   label: 'Zero-Balance Block' },
+    CRITICAL_LOW_STOCK:             { cls: 'low',     label: 'Critical Low Stock' },
+    THRESHOLD_CONFIG_UPDATED:       { cls: 'config',  label: 'Config Updated' },
+    EXPANSION_REQUEST_APPROVED:     { cls: 'approve', label: 'Request Approved' },
+    EXPANSION_REQUEST_REJECTED:     { cls: 'reject',  label: 'Request Rejected' },
+    GLOBAL_ENFORCEMENT_TOGGLED:     { cls: 'toggle',  label: 'Enforcement Toggled' },
+  };
+  return map[e] || { cls: 'config', label: e };
+}
+
+function renderAuditPage() {
+  const tbody   = document.getElementById('audit-log-body');
+  const pageInfo = document.getElementById('audit-page-info');
+  const prevBtn  = document.getElementById('audit-prev');
+  const nextBtn  = document.getElementById('audit-next');
   if (!tbody) return;
-  try {
-    const res = await fetch(`${API_URL}/threshold/audit`);
-    const entries = res.ok ? await res.json() : [];
-    const recent  = entries.slice(0, 20);
 
-    if (recent.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5"><div class="thr-empty-state"><i data-lucide="file-clock" class="lucide-icon"></i><div>No governance events recorded yet.</div></div></td></tr>`;
-      if (window.lucide) window.lucide.createIcons({ root: tbody });
-      return;
-    }
+  const totalItems = auditAllEntries.length;
+  const totalPages = Math.ceil(totalItems / AUDIT_PAGE_SIZE) || 1;
+  if (auditCurrentPage > totalPages) auditCurrentPage = totalPages;
+  if (auditCurrentPage < 1)          auditCurrentPage = 1;
 
-    const eventLabel = (e) => {
-      const map = {
-        STOCK_IN_BLOCKED_MAX_THRESHOLD: { cls: 'block',   label: 'Stock-In Blocked' },
-        NEGATIVE_BALANCE_PREVENTED:     { cls: 'block',   label: 'Zero-Balance Block' },
-        CRITICAL_LOW_STOCK:             { cls: 'low',     label: 'Critical Low Stock' },
-        THRESHOLD_CONFIG_UPDATED:       { cls: 'config',  label: 'Config Updated' },
-        EXPANSION_REQUEST_APPROVED:     { cls: 'approve', label: 'Request Approved' },
-        EXPANSION_REQUEST_REJECTED:     { cls: 'reject',  label: 'Request Rejected' },
-        GLOBAL_ENFORCEMENT_TOGGLED:     { cls: 'toggle',  label: 'Enforcement Toggled' },
-      };
-      return map[e] || { cls: 'config', label: e };
-    };
+  const start   = (auditCurrentPage - 1) * AUDIT_PAGE_SIZE;
+  const pageRows = auditAllEntries.slice(start, start + AUDIT_PAGE_SIZE);
 
-    tbody.innerHTML = recent.map(entry => {
-      const { cls, label } = eventLabel(entry.event);
+  if (pageRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="thr-empty-state"><i data-lucide="file-clock" class="lucide-icon"></i><div>No governance events recorded yet.</div></div></td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows.map(entry => {
+      const { cls, label } = _auditEventLabel(entry.event);
       const detail = entry.productName
         ? `${escapeHtml(entry.productName)}${entry.attempted ? ` (tried: ${entry.attempted})` : entry.newMax ? ` → max: ${entry.newMax}` : ''}`
         : entry.rejectReason ? `Reason: ${escapeHtml(entry.rejectReason.substring(0, 40))}…` : '—';
@@ -4823,7 +4897,30 @@ async function loadAuditLog() {
         <td style="font-size:12px;font-family:monospace;">${escapeHtml(entry.actor || '—')}</td>
       </tr>`;
     }).join('');
-    if (window.lucide) window.lucide.createIcons({ root: tbody });
+  }
+  if (window.lucide) window.lucide.createIcons({ root: tbody });
+
+  if (pageInfo) {
+    pageInfo.textContent = `Page ${totalItems > 0 ? auditCurrentPage : 1} of ${totalPages} (${totalItems} event${totalItems === 1 ? '' : 's'})`;
+  }
+  if (prevBtn) {
+    prevBtn.disabled = auditCurrentPage <= 1;
+    prevBtn.onclick  = () => { if (auditCurrentPage > 1) { auditCurrentPage--; renderAuditPage(); } };
+  }
+  if (nextBtn) {
+    nextBtn.disabled = auditCurrentPage >= totalPages || totalItems === 0;
+    nextBtn.onclick  = () => { if (auditCurrentPage < totalPages) { auditCurrentPage++; renderAuditPage(); } };
+  }
+}
+
+async function loadAuditLog() {
+  const tbody = document.getElementById('audit-log-body');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API_URL}/threshold/audit`);
+    auditAllEntries  = res.ok ? await res.json() : [];
+    auditCurrentPage = 1;
+    renderAuditPage();
   } catch (err) {
     console.error('[Threshold] Failed to load audit log:', err);
   }
@@ -5091,6 +5188,11 @@ document.addEventListener("DOMContentLoaded", async function () {
   ensureToastContainer();
   setupResponsiveSidebar();
 
+  const btnLogoutGlobal = document.getElementById('btn-logout');
+  if (btnLogoutGlobal) {
+    btnLogoutGlobal.addEventListener('click', confirmLogout);
+  }
+
   const page = window.location.pathname.split("/").pop();
   if (page === "index.html" || page === "") { setupLoginEnterKey(); setupPasswordToggle(); }
   if (page === "dashboard.html") { loadDashboard(); setTimeout(animateStatCounters, 100); }
@@ -5100,4 +5202,158 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (page === "transactions.html") { loadTransactions(); setupTransactionFilters(); }
   if (page === "users.html" && userRole === "admin") { loadUsers(); setupUserManagement(); }
   if (page === "threshold.html") setupThreshold();
+  if (page === "settings.html") setupSettings();
 });
+
+// =============================================
+//  SETTINGS PAGE
+// =============================================
+function setupSettings() {
+  // ── Scope advisory dynamic update ──────────────────────────────────────────
+  const scopeSelect   = document.getElementById('backup-scope-select');
+  const scopeBadge    = document.getElementById('scope-badge');
+  const advisoryText  = document.getElementById('scope-advisory-text');
+  const scopeAdvisory = document.getElementById('scope-advisory');
+
+  const SCOPE_META = {
+    Consolidated: {
+      badge:    '<i data-lucide="shield-check" class="lucide-icon" style="width:13px;height:13px;"></i> Full System Scope',
+      advisory: '<strong>Consolidated Scope Selected:</strong> Backups will export complete records from all operational branches. Restoring a consolidated file will overwrite all system data across all branches.',
+      color:    'rgba(59,130,246,0.1)', textColor: 'var(--blue-600)',
+      border:   'rgba(59,130,246,0.2)', bgColor: 'rgba(59,130,246,0.05)'
+    },
+    Montalban: {
+      badge:    '<i data-lucide="map-pin" class="lucide-icon" style="width:13px;height:13px;"></i> Montalban Branch',
+      advisory: '<strong>Montalban Branch Selected:</strong> Only Montalban data will be exported. Restoring will affect <em>only</em> Montalban records — Luzon data remains completely untouched.',
+      color:    'rgba(245,158,11,0.1)', textColor: 'var(--amber-600)',
+      border:   'rgba(245,158,11,0.3)', bgColor: 'rgba(245,158,11,0.05)'
+    },
+    Luzon: {
+      badge:    '<i data-lucide="map-pin" class="lucide-icon" style="width:13px;height:13px;"></i> Luzon Branch',
+      advisory: '<strong>Luzon Branch Selected:</strong> Only Luzon data will be exported. Restoring will affect <em>only</em> Luzon records — Montalban data remains completely untouched.',
+      color:    'rgba(34,197,94,0.1)',  textColor: 'var(--green-600)',
+      border:   'rgba(34,197,94,0.3)',  bgColor:  'rgba(34,197,94,0.05)'
+    }
+  };
+
+  function applyScope(scope) {
+    const meta = SCOPE_META[scope] || SCOPE_META.Consolidated;
+    if (scopeBadge) {
+      scopeBadge.innerHTML = meta.badge;
+      scopeBadge.style.background = meta.color;
+      scopeBadge.style.color      = meta.textColor;
+      if (window.lucide) window.lucide.createIcons({ root: scopeBadge });
+    }
+    if (advisoryText) advisoryText.innerHTML = meta.advisory;
+    if (scopeAdvisory) {
+      scopeAdvisory.style.background   = meta.bgColor;
+      scopeAdvisory.style.borderColor  = meta.border;
+    }
+  }
+
+  if (scopeSelect) {
+    applyScope(scopeSelect.value);
+    scopeSelect.addEventListener('change', () => applyScope(scopeSelect.value));
+  }
+
+  // ── Download Backup → GET /api/backup/download?scope= ──────────────────────
+  const btnDownload = document.getElementById('btn-download-backup');
+  if (btnDownload) {
+    btnDownload.addEventListener('click', async () => {
+      const scope = scopeSelect ? scopeSelect.value : 'Consolidated';
+      btnDownload.disabled = true;
+      btnDownload.innerHTML = '<i data-lucide="loader" class="lucide-icon spin"></i> Preparing…';
+      if (window.lucide) window.lucide.createIcons({ root: btnDownload });
+      try {
+        const res = await fetch(`${API_URL}/backup/download?scope=${encodeURIComponent(scope)}`);
+        if (!res.ok) throw new Error((await res.json()).error || 'Download failed');
+        const blob = await res.blob();
+        const cd   = res.headers.get('Content-Disposition') || '';
+        const fnMatch = cd.match(/filename="?([^"]+)"?/);
+        const filename = fnMatch ? fnMatch[1] : `bhandol_backup_${scope.toLowerCase()}_${new Date().toISOString().split('T')[0]}.json`;
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+        // Log the backup export
+        fetch(`${API_URL}/export-logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: getShortName(), type: `Data Backup (${scope})`, date: getDateStr(), time: getTimeStr(), branch: scope })
+        }).catch(() => {});
+        showToast('success', 'Backup Downloaded', `${scope} backup saved successfully.`);
+      } catch (err) {
+        showToast('error', 'Download Failed', err.message || 'Could not download backup.');
+      } finally {
+        btnDownload.disabled = false;
+        btnDownload.innerHTML = '<i data-lucide="download" class="lucide-icon"></i> Download Backup (.json)';
+        if (window.lucide) window.lucide.createIcons({ root: btnDownload });
+      }
+    });
+  }
+
+  // ── Restore Backup → POST /api/backup/restore ───────────────────────────────
+  const btnRestore  = document.getElementById('btn-restore-backup');
+  const fileInput   = document.getElementById('restore-file-input');
+  if (btnRestore && fileInput) {
+    btnRestore.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const data  = JSON.parse(ev.target.result);
+          const scope = (data.metadata && data.metadata.scope) ? data.metadata.scope
+                      : (scopeSelect ? scopeSelect.value : 'Consolidated');
+          if (!data.users || !data.products || !data.transactions) {
+            showToast('error', 'Restore Failed', 'Invalid backup file: missing required data arrays.');
+            return;
+          }
+          const scopeLabel = scope === 'Consolidated' ? 'ALL system data' : `${scope} branch data`;
+          showConfirmModal(
+            'Restore Backup',
+            `WARNING: This will overwrite ${scopeLabel}. This action cannot be undone. Continue?`,
+            async () => {
+              btnRestore.disabled = true;
+              try {
+                const res = await fetch(`${API_URL}/backup/restore`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...data, scope })
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.error || 'Restore failed');
+                showToast('success', 'Restore Complete', result.message || 'Data restored successfully. Reloading…', 3000);
+                setTimeout(() => window.location.reload(), 2000);
+              } catch (err) {
+                showToast('error', 'Restore Failed', err.message || 'Could not communicate with backend.');
+              } finally {
+                btnRestore.disabled = false;
+              }
+            }
+          );
+        } catch (err) {
+          showToast('error', 'Restore Failed', 'Could not parse the backup file.');
+        }
+        fileInput.value = '';
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  // ── Settings-page Theme Toggle ───────────────────────────────────────────────
+  const settingsThemeToggle = document.getElementById('settings-theme-toggle');
+  if (settingsThemeToggle) {
+    settingsThemeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+    });
+  }
+
+  // ── Sidebar Logout Button (sidebar-footer pattern) ──────────────────────────
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) {
+    btnLogout.addEventListener('click', confirmLogout);
+  }
+}

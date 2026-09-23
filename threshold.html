@@ -104,6 +104,9 @@
                 <a href="users.html" class="admin-only">
                     <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
                 </a>
+                <a href="settings.html" class="admin-only">
+                    <span class="nav-icon"><i data-lucide="settings" class="lucide-icon"></i></span> Settings
+                </a>
             </nav>
 
             <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
@@ -206,6 +209,23 @@
                             </tbody>
                         </table>
                     </div>
+                    <!-- PENDING REQUESTS PAGINATION (10 items per page) -->
+                    <div
+                        style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--surface-border);">
+                        <span id="pending-page-info" style="font-size:13px;color:var(--slate-500);">Page 1 of 1</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="secondary-btn" id="pending-prev"
+                                style="width:auto;padding:6px 14px;font-size:13px;" disabled>
+                                <i data-lucide="chevron-left" class="lucide-icon" style="width:14px;height:14px;"></i>
+                                Prev
+                            </button>
+                            <button class="secondary-btn" id="pending-next"
+                                style="width:auto;padding:6px 14px;font-size:13px;" disabled>
+                                Next <i data-lucide="chevron-right" class="lucide-icon"
+                                    style="width:14px;height:14px;"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- PRODUCT GOVERNANCE CONTROLS -->
@@ -214,8 +234,8 @@
                         <h2><i data-lucide="settings-2" class="lucide-icon"></i> Product Governance Controls</h2>
                     </div>
                     <p class="threshold-section-desc">
-                        Configure Min / Max thresholds per product and toggle individual enforcement. Changes take
-                        effect immediately on the next stock transaction.
+                        Configure Min / Max thresholds per product, custom Low Stock Alert thresholds, and toggle individual enforcement. Changes take
+                        effect immediately on the next stock transaction and Dashboard alerts.
                     </p>
 
                     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
@@ -239,13 +259,14 @@
                                     <th>Stock</th>
                                     <th class="col-thresh">Min</th>
                                     <th class="col-thresh">Max</th>
+                                    <th class="col-thresh" title="Custom threshold for triggering low stock notifications on Dashboard">Low Stock Alert</th>
                                     <th class="col-enforced">Enforced</th>
                                     <th class="col-action">Save</th>
                                 </tr>
                             </thead>
                             <tbody id="governance-products-body">
                                 <tr>
-                                    <td colspan="8">
+                                    <td colspan="9">
                                         <div class="thr-empty-state">
                                             <i data-lucide="package-search" class="lucide-icon"></i>
                                             <div>Loading products...</div>
@@ -302,6 +323,23 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                    <!-- AUDIT TRAIL PAGINATION (10 items per page) -->
+                    <div
+                        style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--surface-border);">
+                        <span id="audit-page-info" style="font-size:13px;color:var(--slate-500);">Page 1 of 1</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="secondary-btn" id="audit-prev"
+                                style="width:auto;padding:6px 14px;font-size:13px;" disabled>
+                                <i data-lucide="chevron-left" class="lucide-icon" style="width:14px;height:14px;"></i>
+                                Prev
+                            </button>
+                            <button class="secondary-btn" id="audit-next"
+                                style="width:auto;padding:6px 14px;font-size:13px;" disabled>
+                                Next <i data-lucide="chevron-right" class="lucide-icon"
+                                    style="width:14px;height:14px;"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

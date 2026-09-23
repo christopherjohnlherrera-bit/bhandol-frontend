@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bhandol Hardware | System Settings</title>
-    <meta name="description" content="Manage data backups and system maintenance for Bhandol Hardware.">
+    <meta name="description" content="Manage system preferences, branch-scoped database backups, and restoration for Bhandol Hardware.">
     <link rel="stylesheet" href="assets/css/style.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -68,6 +68,9 @@
                 <a href="users.html" class="admin-only">
                     <span class="nav-icon"><i data-lucide="users" class="lucide-icon"></i></span> User Management
                 </a>
+                <a href="settings.html" class="active admin-only">
+                    <span class="nav-icon"><i data-lucide="settings" class="lucide-icon"></i></span> Settings
+                </a>
             </nav>
 
             <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
@@ -112,16 +115,71 @@
                 <div style="margin-bottom: 24px;">
                     <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 6px 0; color: var(--slate-800);">System Settings</h1>
                     <p style="font-size: 14px; color: var(--slate-500); margin: 0;">
-                        Manage database backups, snapshots, and system maintenance.
+                        Manage system preferences, branch-scoped database backups, and restoration controls.
                     </p>
                 </div>
 
-                <!-- DATA BACKUP CARD (Full Intact) -->
-                <div class="card admin-only" id="system-tools-card" style="margin-bottom: 24px;">
-                    <h2 style="margin-bottom: 4px;"><i data-lucide="database" class="lucide-icon"></i> Data Backup</h2>
-                    <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 16px;">
-                        Download a full snapshot of your data (users, products, transactions), or restore from a backup file.
+                <!-- CARD 1: APPEARANCE & DISPLAY SETTINGS -->
+                <div class="card" style="margin-bottom: 24px;">
+                    <h2 style="margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="palette" class="lucide-icon"></i> Appearance & Display
+                    </h2>
+                    <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 20px;">
+                        Customize your workspace appearance and interface theme.
                     </p>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface-alt); border: 1px solid var(--surface-border); border-radius: var(--radius-sm);">
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px; color: var(--slate-800); margin-bottom: 4px;">Dark Mode Theme</div>
+                            <div style="font-size: 13px; color: var(--slate-500);">Switch between standard light interface and high-contrast dark palette.</div>
+                        </div>
+                        <div class="theme-toggle" id="settings-theme-toggle" style="cursor: pointer; margin: 0; background: var(--surface); border: 1px solid var(--surface-border-strong); padding: 8px 14px; border-radius: 20px; display: inline-flex; align-items: center; gap: 10px;">
+                            <span class="theme-toggle-label" style="font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="moon" class="lucide-icon" style="width:15px;height:15px;"></i>
+                                <span id="settings-theme-status">Dark Mode</span>
+                            </span>
+                            <div class="theme-switch"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 2: BRANCH-SCOPED DATA BACKUP & RESTORE -->
+                <div class="card admin-only" id="system-tools-card" style="margin-bottom: 24px;">
+                    <h2 style="margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="database" class="lucide-icon"></i> Data Backup & Recovery
+                    </h2>
+                    <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 20px;">
+                        Download a snapshot of your inventory, transaction, and user data or restore from an existing JSON backup. Scope exports and restorations system-wide or isolate strictly by branch.
+                    </p>
+
+                    <!-- SCOPE SELECTOR UI -->
+                    <div style="margin-bottom: 20px;">
+                        <label for="backup-scope-select" style="display: block; font-weight: 600; font-size: 13.5px; margin-bottom: 8px; color: var(--slate-700);">
+                            Target Backup / Restore Scope:
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <select id="backup-scope-select" style="min-width: 280px; padding: 9px 14px; font-size: 14px; font-weight: 500; border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--slate-800); outline: none; cursor: pointer;">
+                                <option value="Consolidated" selected>Consolidated (All Branches)</option>
+                                <option value="Montalban">Montalban Branch</option>
+                                <option value="Luzon">Luzon Branch</option>
+                            </select>
+                            <span id="scope-badge" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: rgba(59, 130, 246, 0.1); color: var(--blue-600); display: inline-flex; align-items: center; gap: 5px;">
+                                <i data-lucide="shield-check" class="lucide-icon" style="width: 13px; height: 13px;"></i> Full System Scope
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- SCOPE SAFETY ADVISORY CALLOUT -->
+                    <div id="scope-advisory" style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <i data-lucide="info" class="lucide-icon" style="color: var(--blue-600); width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px;"></i>
+                            <div style="font-size: 13px; color: var(--slate-600); line-height: 1.5;" id="scope-advisory-text">
+                                <strong>Consolidated Scope Selected:</strong> Backups will export complete records from all operational branches. Restoring a consolidated file will overwrite all system data across all branches.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ACTION BUTTONS -->
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <button class="primary-btn" id="btn-download-backup" style="width: auto;">
                             <i data-lucide="download" class="lucide-icon"></i> Download Backup (.json)
@@ -133,7 +191,7 @@
                     </div>
                 </div>
 
-                <!-- GOVERNANCE REDIRECT CARD -->
+                <!-- CARD 3: GOVERNANCE & UTILITIES SHORTCUT -->
                 <div class="card" style="border-left: 4px solid var(--blue-500);">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                         <div>
@@ -142,7 +200,7 @@
                                 Stock Thresholds & Governance Controls
                             </h3>
                             <p style="margin: 0; font-size: 13px; color: var(--slate-500);">
-                                Per-product Min/Max threshold enforcement and expansion requests are managed in the dedicated Thresholds module.
+                                Per-product Min/Max capacity boundaries, custom alert thresholds, and limit expansion reviews are managed in the Thresholds module.
                             </p>
                         </div>
                         <a href="threshold.html" class="primary-btn" style="width: auto; text-decoration: none; padding: 8px 16px; font-size: 13px;">
