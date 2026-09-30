@@ -2691,10 +2691,16 @@ function setupStockIn() {
         if (prevAlert) prevAlert.style.display = 'none';
 
         const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
-        if (!txnRes.ok) {
+        let backendTxn = null;
+        if (txnRes.ok) {
+          backendTxn = await txnRes.json().catch(() => null);
+        } else {
           const errData = await txnRes.json().catch(() => ({}));
           console.warn('Transaction record warning:', errData);
         }
+
+        const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
+        txnPayload.id = effectiveTxnId;
         appTxns.push(txnPayload);
 
         // Update activity timeline on dashboard if visible
@@ -2703,18 +2709,21 @@ function setupStockIn() {
         // Provide Undo functionality
         const onUndo = async () => {
           try {
-            await fetch(`${API_URL}/transactions/${txnId}`, { method: "DELETE" });
-            appTxns = appTxns.filter(t => t.id !== txnId);
+            if (effectiveTxnId) {
+              await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
+              appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
+            }
 
             // Update activity timeline on dashboard
             updateActivityTimeline();
 
+            const targetProdId = txnPayload.productId || newId;
             if (isNewProduct) {
-              await fetch(`${API_URL}/inventory/${newId}`, { method: "DELETE" });
-              appProducts = appProducts.filter(p => p.id !== newId);
+              await fetch(`${API_URL}/inventory/${targetProdId}`, { method: "DELETE" }).catch(() => {});
+              appProducts = appProducts.filter(p => p.id !== targetProdId);
             } else {
-              await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) });
-              const pMatch = appProducts.find(p => p.id === newId);
+              await fetch(`${API_URL}/inventory/${targetProdId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) }).catch(() => {});
+              const pMatch = appProducts.find(p => p.id === targetProdId);
               if (pMatch) pMatch.quantity -= qty;
             }
             showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
@@ -3020,10 +3029,16 @@ function setupStockOut() {
         prod.quantity -= qty;
 
         const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
-        if (!txnRes.ok) {
+        let backendTxn = null;
+        if (txnRes.ok) {
+          backendTxn = await txnRes.json().catch(() => null);
+        } else {
           const errData = await txnRes.json().catch(() => ({}));
           console.warn('Transaction record warning:', errData);
         }
+
+        const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
+        txnPayload.id = effectiveTxnId;
         appTxns.push(txnPayload);
 
         // Update activity timeline on dashboard if visible
@@ -3031,13 +3046,15 @@ function setupStockOut() {
 
         const onUndo = async () => {
           try {
-            await fetch(`${API_URL}/transactions/${txnId}`, { method: "DELETE" });
-            appTxns = appTxns.filter(t => t.id !== txnId);
+            if (effectiveTxnId) {
+              await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
+              appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
+            }
 
             // Update activity timeline on dashboard
             updateActivityTimeline();
 
-            await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: qty }) });
+            await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: qty }) }).catch(() => {});
             prod.quantity += qty;
 
             showToast('info', 'Action Undone', `Stock Out of ${qty} ${prod.unit} ${prod.name} reverted.`, 3000);
