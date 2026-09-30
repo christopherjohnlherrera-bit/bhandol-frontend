@@ -73,16 +73,15 @@
                 </a>
             </nav>
 
-            <div class="theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
-                <span class="theme-toggle-label"><i data-lucide="moon" class="lucide-icon"
-                        style="width:14px;height:14px;"></i> Dark Mode</span>
-                <div class="theme-switch"></div>
-            </div>
-
-            <div class="sidebar-footer">
-                <button class="logout-btn" id="btn-logout" title="Sign out of your session">
-                    <i data-lucide="log-out" class="lucide-icon"></i> Logout
-                </button>
+            <div class="user-box">
+                <div class="user-info-row">
+                    <div class="user-avatar" id="userAvatar"></div>
+                    <div class="user-details">
+                        <p class="username" id="displayName"></p>
+                        <p class="role" id="displayRole"></p>
+                    </div>
+                </div>
+                <button onclick="confirmLogout()">Log out</button>
             </div>
         </aside>
 
@@ -99,15 +98,7 @@
                     <div id="branch-switcher-container" style="display:none;"></div>
                 </div>
 
-                <div class="topbar-right">
-                    <div class="user-badge" id="userBadge">
-                        <div class="user-avatar" id="userAvatar">A</div>
-                        <div class="user-info">
-                            <span class="user-name" id="displayName">Administrator</span>
-                            <span class="user-role" id="displayRole">Admin</span>
-                        </div>
-                    </div>
-                </div>
+                <div class="topbar-right"></div>
             </header>
 
             <div class="page-body" style="padding: 28px 32px; max-width: 1200px;">

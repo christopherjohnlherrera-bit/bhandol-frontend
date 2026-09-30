@@ -3500,44 +3500,61 @@ function setupSearchShortcut() {
 // =============================================
 //  DARK MODE TOGGLE
 // =============================================
+function updateThemeUI(isDark) {
+  const statusEl = document.getElementById("settings-theme-status");
+  if (statusEl) {
+    statusEl.textContent = isDark ? "Dark Mode (Enabled)" : "Dark Mode (Disabled)";
+  }
+}
+
 function initTheme() {
-  const isDark = localStorage.getItem("bhandolTheme") === "dark";
-  if (isDark) document.body.classList.add("dark-mode");
+  const isDark = localStorage.getItem("bhandolTheme") === "dark" || localStorage.getItem("darkMode") === "true";
+  if (isDark) {
+    document.body.classList.add("dark-mode");
+  } else {
+    document.body.classList.remove("dark-mode");
+  }
+  updateThemeUI(isDark);
+
+  const handleToggle = () => {
+    document.body.classList.toggle("dark-mode");
+    const isNowDark = document.body.classList.contains("dark-mode");
+    const mode = isNowDark ? "dark" : "light";
+    localStorage.setItem("bhandolTheme", mode);
+    localStorage.setItem("darkMode", String(isNowDark));
+    updateThemeUI(isNowDark);
+
+    // Dynamically push the new contrast border color to the dashboard pie chart if it exists
+    if (window.dashboardPieChart) {
+      const newColor = isNowDark
+        ? getComputedStyle(document.body).getPropertyValue('--slate-800').trim()
+        : getComputedStyle(document.body).getPropertyValue('--navy-800').trim();
+      window.dashboardPieChart.data.datasets[0].borderColor = newColor;
+      window.dashboardPieChart.options.plugins.legend.labels.color = isNowDark ? '#c8d6e5' : '#64748b';
+      window.dashboardPieChart.update();
+    }
+    // Dynamically update bar chart axis/legend colors for dark mode
+    if (window.dashboardBarChart) {
+      const newTextColor = isNowDark ? '#c8d6e5' : '#64748b';
+      const chart = window.dashboardBarChart;
+      if (chart.options.scales && chart.options.scales.x && chart.options.scales.x.ticks)
+        chart.options.scales.x.ticks.color = newTextColor;
+      if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks)
+        chart.options.scales.y.ticks.color = newTextColor;
+      if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels)
+        chart.options.plugins.legend.labels.color = newTextColor;
+      chart.update();
+    }
+  };
 
   const toggleBtn = document.getElementById("theme-toggle");
   if (toggleBtn) {
-    toggleBtn.addEventListener("click", () => {
-      document.body.classList.toggle("dark-mode");
-      const mode = document.body.classList.contains("dark-mode") ? "dark" : "light";
-      localStorage.setItem("bhandolTheme", mode);
-
-      // Dynamically push the new contrast border color to the dashboard pie chart if it exists
-      if (window.dashboardPieChart) {
-        const isDark = mode === "dark";
-        const newColor = isDark
-          ? getComputedStyle(document.body).getPropertyValue('--slate-800').trim()
-          : getComputedStyle(document.body).getPropertyValue('--navy-800').trim();
-        window.dashboardPieChart.data.datasets[0].borderColor = newColor;
-        // Update legend label color for dark mode legibility
-        window.dashboardPieChart.options.plugins.legend.labels.color = isDark ? '#c8d6e5' : '#64748b';
-        window.dashboardPieChart.update();
-      }
-      // Dynamically update bar chart axis/legend colors for dark mode
-      if (window.dashboardBarChart) {
-        const isDark = mode === "dark";
-        const newTextColor = isDark ? '#c8d6e5' : '#64748b';
-        const chart = window.dashboardBarChart;
-        if (chart.options.scales && chart.options.scales.x && chart.options.scales.x.ticks)
-          chart.options.scales.x.ticks.color = newTextColor;
-        if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks)
-          chart.options.scales.y.ticks.color = newTextColor;
-        if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels)
-          chart.options.plugins.legend.labels.color = newTextColor;
-        chart.update();
-      }
-    });
+    toggleBtn.addEventListener("click", handleToggle);
   }
-
+  const settingsToggle = document.getElementById("settings-theme-toggle");
+  if (settingsToggle) {
+    settingsToggle.addEventListener("click", handleToggle);
+  }
 }
 
 // =============================================
@@ -5342,14 +5359,6 @@ function setupSettings() {
     });
   }
 
-  // ── Settings-page Theme Toggle ───────────────────────────────────────────────
-  const settingsThemeToggle = document.getElementById('settings-theme-toggle');
-  if (settingsThemeToggle) {
-    settingsThemeToggle.addEventListener('click', () => {
-      document.body.classList.toggle('dark-mode');
-      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
-    });
-  }
 
   // ── Sidebar Logout Button (sidebar-footer pattern) ──────────────────────────
   const btnLogout = document.getElementById('btn-logout');
