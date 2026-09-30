@@ -3572,12 +3572,52 @@ function setupSearchShortcut() {
 }
 
 // =============================================
-//  DARK MODE TOGGLE
+//  DARK MODE THEME MANAGEMENT
 // =============================================
 function updateThemeUI(isDark) {
-  const statusEl = document.getElementById("settings-theme-status");
-  if (statusEl) {
-    statusEl.textContent = isDark ? "Dark Mode (Enabled)" : "Dark Mode (Disabled)";
+  const sidebarToggle = document.getElementById("sidebar-theme-toggle");
+  if (sidebarToggle) {
+    sidebarToggle.setAttribute("aria-checked", isDark ? "true" : "false");
+    const statusText = sidebarToggle.querySelector(".sidebar-theme-text");
+    if (statusText) {
+      statusText.textContent = isDark ? "Dark Mode" : "Light Mode";
+    }
+    const icon = sidebarToggle.querySelector(".sidebar-theme-icon");
+    if (icon) {
+      icon.setAttribute("data-lucide", isDark ? "moon" : "sun");
+      if (window.lucide) window.lucide.createIcons({ root: sidebarToggle });
+    }
+  }
+}
+
+function toggleTheme() {
+  document.body.classList.toggle("dark-mode");
+  const isNowDark = document.body.classList.contains("dark-mode");
+  const mode = isNowDark ? "dark" : "light";
+  localStorage.setItem("bhandolTheme", mode);
+  localStorage.setItem("darkMode", String(isNowDark));
+  updateThemeUI(isNowDark);
+
+  // Dynamically push the new contrast border color to the dashboard pie chart if it exists
+  if (window.dashboardPieChart) {
+    const newColor = isNowDark
+      ? getComputedStyle(document.body).getPropertyValue('--slate-800').trim()
+      : getComputedStyle(document.body).getPropertyValue('--navy-800').trim();
+    window.dashboardPieChart.data.datasets[0].borderColor = newColor;
+    window.dashboardPieChart.options.plugins.legend.labels.color = isNowDark ? '#c8d6e5' : '#64748b';
+    window.dashboardPieChart.update();
+  }
+  // Dynamically update bar chart axis/legend colors for dark mode
+  if (window.dashboardBarChart) {
+    const newTextColor = isNowDark ? '#c8d6e5' : '#64748b';
+    const chart = window.dashboardBarChart;
+    if (chart.options.scales && chart.options.scales.x && chart.options.scales.x.ticks)
+      chart.options.scales.x.ticks.color = newTextColor;
+    if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks)
+      chart.options.scales.y.ticks.color = newTextColor;
+    if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels)
+      chart.options.plugins.legend.labels.color = newTextColor;
+    chart.update();
   }
 }
 
@@ -3590,44 +3630,21 @@ function initTheme() {
   }
   updateThemeUI(isDark);
 
-  const handleToggle = () => {
-    document.body.classList.toggle("dark-mode");
-    const isNowDark = document.body.classList.contains("dark-mode");
-    const mode = isNowDark ? "dark" : "light";
-    localStorage.setItem("bhandolTheme", mode);
-    localStorage.setItem("darkMode", String(isNowDark));
-    updateThemeUI(isNowDark);
-
-    // Dynamically push the new contrast border color to the dashboard pie chart if it exists
-    if (window.dashboardPieChart) {
-      const newColor = isNowDark
-        ? getComputedStyle(document.body).getPropertyValue('--slate-800').trim()
-        : getComputedStyle(document.body).getPropertyValue('--navy-800').trim();
-      window.dashboardPieChart.data.datasets[0].borderColor = newColor;
-      window.dashboardPieChart.options.plugins.legend.labels.color = isNowDark ? '#c8d6e5' : '#64748b';
-      window.dashboardPieChart.update();
-    }
-    // Dynamically update bar chart axis/legend colors for dark mode
-    if (window.dashboardBarChart) {
-      const newTextColor = isNowDark ? '#c8d6e5' : '#64748b';
-      const chart = window.dashboardBarChart;
-      if (chart.options.scales && chart.options.scales.x && chart.options.scales.x.ticks)
-        chart.options.scales.x.ticks.color = newTextColor;
-      if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks)
-        chart.options.scales.y.ticks.color = newTextColor;
-      if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels)
-        chart.options.plugins.legend.labels.color = newTextColor;
-      chart.update();
-    }
-  };
-
-  const toggleBtn = document.getElementById("theme-toggle");
-  if (toggleBtn) {
-    toggleBtn.addEventListener("click", handleToggle);
+  const sidebarToggle = document.getElementById("sidebar-theme-toggle");
+  if (sidebarToggle && !sidebarToggle.dataset.themeBound) {
+    sidebarToggle.dataset.themeBound = "true";
+    sidebarToggle.addEventListener("click", toggleTheme);
+    sidebarToggle.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleTheme();
+      }
+    });
   }
-  const settingsToggle = document.getElementById("settings-theme-toggle");
-  if (settingsToggle) {
-    settingsToggle.addEventListener("click", handleToggle);
+  const toggleBtn = document.getElementById("theme-toggle");
+  if (toggleBtn && !toggleBtn.dataset.themeBound) {
+    toggleBtn.dataset.themeBound = "true";
+    toggleBtn.addEventListener("click", toggleTheme);
   }
 }
 
@@ -5212,13 +5229,14 @@ window.closeWidgetFullscreen = function () {
 };
 
 // =============================================
-//  SIDEBAR REAL-TIME CLOCK
+//  SIDEBAR REAL-TIME CLOCK & THEME TOGGLE
 // =============================================
-function initSidebarClock() {
+function initSidebarWidgets() {
   const userBox = document.querySelector("aside.sidebar .user-box") || document.querySelector(".user-box");
   const sidebar = document.querySelector("aside.sidebar");
   if (!sidebar) return;
 
+  // 1. Live Digital Clock (above Theme Toggle & User Box)
   let clockDiv = document.getElementById("sidebar-clock");
   if (!clockDiv) {
     clockDiv = document.createElement("div");
@@ -5252,6 +5270,38 @@ function initSidebarClock() {
   if (!window._sidebarClockTimer) {
     window._sidebarClockTimer = setInterval(updateClock, 1000);
   }
+
+  // 2. Sidebar Theme Toggle (positioned below clock, directly above user profile container)
+  let themeDiv = document.getElementById("sidebar-theme-toggle");
+  if (!themeDiv) {
+    themeDiv = document.createElement("div");
+    themeDiv.className = "sidebar-theme-toggle";
+    themeDiv.id = "sidebar-theme-toggle";
+    themeDiv.setAttribute("role", "button");
+    themeDiv.setAttribute("tabindex", "0");
+    themeDiv.setAttribute("title", "Toggle Light / Dark Mode");
+    const isDarkNow = document.body.classList.contains("dark-mode");
+    themeDiv.innerHTML = `
+      <div class="sidebar-theme-left">
+        <i data-lucide="${isDarkNow ? 'moon' : 'sun'}" class="lucide-icon sidebar-theme-icon" style="width:14px;height:14px;"></i>
+        <span class="sidebar-theme-text">${isDarkNow ? 'Dark Mode' : 'Light Mode'}</span>
+      </div>
+      <div class="theme-switch"></div>
+    `;
+
+    if (userBox && userBox.parentNode) {
+      userBox.parentNode.insertBefore(themeDiv, userBox);
+    } else {
+      sidebar.appendChild(themeDiv);
+    }
+    if (window.lucide) window.lucide.createIcons({ root: themeDiv });
+  }
+
+  initTheme();
+}
+
+function initSidebarClock() {
+  initSidebarWidgets();
 }
 
 // =============================================

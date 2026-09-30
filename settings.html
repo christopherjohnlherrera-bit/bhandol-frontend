@@ -73,6 +73,21 @@
                 </a>
             </nav>
 
+            <!-- LIVE DIGITAL CLOCK -->
+            <div id="sidebar-clock" class="sidebar-clock">
+                <i data-lucide="clock" class="lucide-icon" style="width:14px;height:14px;"></i>
+                <span id="clock-time">--:--:-- --</span>
+            </div>
+
+            <!-- SIDEBAR THEME TOGGLE -->
+            <div class="sidebar-theme-toggle" id="sidebar-theme-toggle" role="button" tabindex="0" title="Toggle Light / Dark Mode">
+                <div class="sidebar-theme-left">
+                    <i data-lucide="moon" class="lucide-icon sidebar-theme-icon" style="width:14px;height:14px;"></i>
+                    <span class="sidebar-theme-text">Dark Mode</span>
+                </div>
+                <div class="theme-switch"></div>
+            </div>
+
             <div class="user-box">
                 <div class="user-info-row">
                     <div class="user-avatar" id="userAvatar"></div>
@@ -108,27 +123,6 @@
                     <p style="font-size: 14px; color: var(--slate-500); margin: 0;">
                         Manage system preferences, branch-scoped database backups, and restoration controls.
                     </p>
-                </div>
-
-                <!-- CARD 1: APPEARANCE & DISPLAY SETTINGS -->
-                <div class="card" style="margin-bottom: 24px;">
-                    <h2 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                        <i data-lucide="palette" class="lucide-icon"></i> Appearance & Display
-                    </h2>
-
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface-alt); border: 1px solid var(--surface-border); border-radius: var(--radius-sm);">
-                        <div>
-                            <div style="font-weight: 600; font-size: 14px; color: var(--slate-800); margin-bottom: 4px;">Dark Mode Theme</div>
-                            <div style="font-size: 13px; color: var(--slate-500);">Switch between standard light interface and high-contrast dark palette.</div>
-                        </div>
-                        <div class="theme-toggle" id="settings-theme-toggle" style="cursor: pointer; margin: 0; padding: 8px 16px; border-radius: 24px; display: inline-flex; align-items: center; gap: 12px;">
-                            <span class="theme-toggle-label" style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px;">
-                                <i data-lucide="moon" class="lucide-icon" style="width:15px;height:15px;"></i>
-                                <span id="settings-theme-status">Dark Mode</span>
-                            </span>
-                            <div class="theme-switch"></div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- CARD 2: BRANCH-SCOPED DATA BACKUP & RESTORE -->
