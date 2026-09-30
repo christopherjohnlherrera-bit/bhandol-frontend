@@ -3684,33 +3684,77 @@ function initTheme() {
 // =============================================
 
 let _txnNetChartInstance = null;
+let _currentReportTimeframe = 'this-month';
+let _reportTablePages = {};
+let _activeReportType = null;
 
-// Read the active date pickers from the transactions page filter bar
-function getActiveTxnDateFilter() {
-  return {
-    dateFrom: document.getElementById('txn-date-from')?.value || '',
-    dateTo: document.getElementById('txn-date-to')?.value || ''
-  };
-}
+// Timeframe filter helper for report modals
+function _getTxnsForTimeframe(timeframeKey, txns) {
+  if (!timeframeKey || timeframeKey === 'all-time') {
+    return txns;
+  }
 
-// Reuse same DD/MM/YYYY → YYYY-MM-DD parsing already in applyFilters
-function _filterTxnsByDate(txns, dateFrom, dateTo) {
-  if (!dateFrom && !dateTo) return txns;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed (0=Jan, 8=Sep)
+
+  let startIso = '';
+  let endIso = '';
+
+  if (timeframeKey === 'this-month') {
+    const start = new Date(currentYear, currentMonth, 1);
+    const end = new Date(currentYear, currentMonth + 1, 0);
+    startIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`;
+    endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+  } else if (timeframeKey === 'last-month') {
+    const start = new Date(currentYear, currentMonth - 1, 1);
+    const end = new Date(currentYear, currentMonth, 0);
+    startIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`;
+    endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+  } else if (timeframeKey === 'last-30-days') {
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    startIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+    endIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
   return txns.filter(t => {
-    const parts = t.date.split('/');
-    if (parts.length !== 3) return true;
-    const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    if (dateFrom && iso < dateFrom) return false;
-    if (dateTo && iso > dateTo) return false;
+    let iso = '';
+    if (t.date && t.date.includes('/')) {
+      const parts = t.date.split('/');
+      if (parts.length === 3) {
+        iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    } else if (t.date && t.date.includes('-')) {
+      iso = t.date;
+    }
+    if (!iso) return true;
+    if (startIso && iso < startIso) return false;
+    if (endIso && iso > endIso) return false;
     return true;
   });
 }
+
+window.onTxnReportTimeframeChange = function(val) {
+  _currentReportTimeframe = val || 'this-month';
+  if (_activeReportType) {
+    _reportTablePages['stock-in-report-table'] = 1;
+    _reportTablePages['stock-out-report-table'] = 1;
+    _reportTablePages['net-move-report-table'] = 1;
+    window.openTxnReportModal(_activeReportType, false);
+  }
+};
 
 // --- Shared inner HTML builders ---
 
 function _buildHighlightWidget(title, icon, items, accentCss) {
   if (items.length === 0) {
-    return `<div style="color:var(--slate-400);font-size:13px;padding:12px 0;">No data available for the selected period.</div>`;
+    return `
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:20px;border:1px solid var(--surface-border);flex-shrink:0;">
+        <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          <i data-lucide="${icon}" class="lucide-icon" style="width:14px;height:14px;"></i>${title}
+        </h3>
+        <div style="color:var(--slate-400);font-size:13px;padding:8px 0;">No movement data recorded for the selected timeframe.</div>
+      </div>`;
   }
   const maxVal = items[0].value;
   return `
@@ -3736,16 +3780,13 @@ function _buildHighlightWidget(title, icon, items, accentCss) {
     </div>`;
 }
 
-let _reportTablePages = {};
-let _activeReportType = null;
-
 function _buildReportTable(headers, rows, emptyMsg, tableKey = 'default') {
   if (rows.length === 0) {
     return `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 0;color:var(--slate-400);">
         <i data-lucide="file-search" class="lucide-icon" style="width:44px;height:44px;color:var(--slate-300);margin-bottom:14px;"></i>
         <h3 style="margin:0 0 6px;color:var(--slate-500);font-weight:500;">${emptyMsg}</h3>
-        <p style="margin:0;font-size:13px;">Adjust the date filter or check back when records are available.</p>
+        <p style="margin:0;font-size:13px;">Adjust the timeframe filter or check back when records are available.</p>
       </div>`;
   }
 
@@ -3835,7 +3876,7 @@ function _renderStockInReport(txns, bodyEl) {
       ${_buildReportTable(
         ['Date', 'Time', 'Product', 'Category', 'Qty Added', 'Unit', 'User'],
         tableRows,
-        'No Stock In data recorded for this period',
+        'No Stock In data recorded for this timeframe',
         'stock-in-report-table'
       )}
     </div>`;
@@ -3849,7 +3890,7 @@ function _renderStockOutReport(txns, bodyEl) {
     .map(([name, value]) => ({ name, value }));
 
   const highlightHtml = _buildHighlightWidget(
-    'Top Deficit — Most Stocked Out Items',
+    'Top 5 Items Deducted — Top 5 by Volume',
     'trending-down', top5,
     'color:var(--red-600);'
   );
@@ -3858,7 +3899,6 @@ function _renderStockOutReport(txns, bodyEl) {
     t.date, t.time,
     `<strong style="color:var(--slate-700);">${t.product}</strong>`,
     categoryBadge(t.category),
-    // Always show absolute positive quantity for readability
     `<span style="font-weight:700;color:var(--red-600);">${Math.abs(t.quantity).toLocaleString()}</span>`,
     t.unit,
     t.user
@@ -3874,7 +3914,7 @@ function _renderStockOutReport(txns, bodyEl) {
       ${_buildReportTable(
         ['Date', 'Time', 'Product', 'Category', 'Qty Deducted', 'Unit', 'User'],
         tableRows,
-        'No Stock Out data recorded for this period',
+        'No Stock Out data recorded for this timeframe',
         'stock-out-report-table'
       )}
     </div>`;
@@ -3923,8 +3963,8 @@ function _renderNetMovementReport(txns, bodyEl) {
     bodyEl.innerHTML = summaryHtml + `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 0;color:var(--slate-400);">
         <i data-lucide="bar-chart-2" class="lucide-icon" style="width:44px;height:44px;color:var(--slate-300);margin-bottom:14px;"></i>
-        <h3 style="margin:0 0 6px;color:var(--slate-500);font-weight:500;">No movement data for this period</h3>
-        <p style="margin:0;font-size:13px;">Adjust the date filter or add transactions to see analysis.</p>
+        <h3 style="margin:0 0 6px;color:var(--slate-500);font-weight:500;">No movement data for this timeframe</h3>
+        <p style="margin:0;font-size:13px;">Adjust the timeframe dropdown to view historical analysis.</p>
       </div>`;
     return;
   }
@@ -3991,7 +4031,6 @@ function _renderNetMovementReport(txns, bodyEl) {
           {
             label: 'Net',
             data: netData,
-            // Positive net → blue accent; negative → red tint
             backgroundColor: netData.map(v => v >= 0 ? 'rgba(59,130,246,0.75)' : 'rgba(239,68,68,0.4)'),
             borderRadius: 5,
             maxBarThickness: 32
@@ -4044,6 +4083,7 @@ window.openTxnReportModal = function (type, resetPage = true) {
   const modal = document.getElementById('txn-report-modal');
   const titleEl = document.getElementById('txn-report-title');
   const bodyEl = document.getElementById('txn-report-body');
+  const tfSelect = document.getElementById('txn-report-timeframe');
   if (!modal || !titleEl || !bodyEl) return;
 
   _activeReportType = type;
@@ -4051,17 +4091,20 @@ window.openTxnReportModal = function (type, resetPage = true) {
     _reportTablePages['stock-in-report-table'] = 1;
     _reportTablePages['stock-out-report-table'] = 1;
     _reportTablePages['net-move-report-table'] = 1;
+    _currentReportTimeframe = 'this-month';
+    if (tfSelect) tfSelect.value = 'this-month';
+  } else if (tfSelect) {
+    tfSelect.value = _currentReportTimeframe;
   }
 
   // Tear down any stale chart before rebuilding
   if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
   bodyEl.innerHTML = '';
 
-  // Grab the active date filter from the page
-  const { dateFrom, dateTo } = getActiveTxnDateFilter();
-  // Use already-filtered set so category/search/type dropdowns are also respected
-  const baseTxns = currentFilteredTxns || getTransactions();
-  const dateTxns = _filterTxnsByDate(baseTxns, dateFrom, dateTo);
+  // Get base transaction pool
+  const baseTxns = getTransactions();
+  // Filter strictly by the active modal timeframe
+  const dateTxns = _getTxnsForTimeframe(_currentReportTimeframe, baseTxns);
 
   if (type === 'in') {
     const txns = dateTxns.filter(t => t.type === 'Stock In');
@@ -4077,8 +4120,7 @@ window.openTxnReportModal = function (type, resetPage = true) {
   }
 
   modal.style.display = 'flex';
-  if (window.lucide) window.lucide.createIcons({ nodes: [modal] });
-  // Close on backdrop click
+  if (window.lucide) window.lucide.createIcons({ root: modal });
   modal.onclick = (e) => { if (e.target === modal) window.closeTxnReportModal(); };
 };
 
