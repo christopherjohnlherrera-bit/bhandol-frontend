@@ -151,11 +151,16 @@ function getProducts() { return appProducts; }
 function getTransactions() { return appTxns; }
 
 function nextTxnId() {
-  const txns = getTransactions();
+  const txns = getTransactions() || [];
   let maxNum = 0;
   txns.forEach(t => {
-    const num = parseInt(t.id.replace("TXN", ""), 10);
-    if (!isNaN(num) && num > maxNum) maxNum = num;
+    if (t && t.id) {
+      const match = String(t.id).match(/\d+/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
   });
   return "TXN" + String(maxNum + 1).padStart(2, "0");
 }
@@ -163,8 +168,8 @@ function nextTxnId() {
 function isTxnIdGreaterThan(idA, idB) {
   if (!idA) return false;
   if (!idB) return true;
-  const numA = parseInt(idA.replace("TXN", ""), 10);
-  const numB = parseInt(idB.replace("TXN", ""), 10);
+  const numA = parseInt(String(idA).replace(/\D/g, ""), 10) || 0;
+  const numB = parseInt(String(idB).replace(/\D/g, ""), 10) || 0;
   return numA > numB;
 }
 
@@ -2572,182 +2577,198 @@ function setupStockIn() {
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
 
-    clearFormErrors(form);
+    try {
+      clearFormErrors(form);
 
-    const nameEl = document.getElementById("si-name");
-    const catEl = document.getElementById("si-category");
-    const unitEl = document.getElementById("si-unit");
-    const qtyEl = document.getElementById("si-quantity");
+      const nameEl = document.getElementById("si-name");
+      const catEl = document.getElementById("si-category");
+      const unitEl = document.getElementById("si-unit");
+      const qtyEl = document.getElementById("si-quantity");
 
-    const name = nameEl.value.trim();
-    const cat = catEl.value.trim();
-    const unit = unitEl.value.trim();
-    const qty = parseInt(qtyEl.value);
+      const name = nameEl ? nameEl.value.trim() : "";
+      const cat = catEl ? catEl.value.trim() : "";
+      const unit = unitEl ? unitEl.value.trim() : "";
+      const qty = parseInt(qtyEl ? qtyEl.value : "0", 10);
 
-    let valid = true;
-    if (!name || name.length === 0) { setFieldError(nameEl, "Product name is required."); valid = false; }
-    if (!cat || cat.length < 2) { setFieldError(catEl, "Valid category required."); valid = false; }
-    if (!unit || unit.length < 2) { setFieldError(unitEl, "Valid unit required."); valid = false; }
-    if (isNaN(qty) || qty <= 0) { setFieldError(qtyEl, "Enter a valid quantity > 0."); valid = false; }
-    if (!valid) { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; return; }
+      let valid = true;
+      if (!name || name.length === 0) { setFieldError(nameEl, "Product name is required."); valid = false; }
+      if (!cat || cat.length < 2) { setFieldError(catEl, "Valid category required."); valid = false; }
+      if (!unit || unit.length < 2) { setFieldError(unitEl, "Valid unit required."); valid = false; }
+      if (isNaN(qty) || qty <= 0) { setFieldError(qtyEl, "Enter a valid quantity > 0."); valid = false; }
+      if (!valid) {
+        siSubmitting = false;
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+      }
 
-    const dateStr = getDateStr();
-    const timeStr = getTimeStr();
-    const shortName = getShortName();
+      const dateStr = getDateStr();
+      const timeStr = getTimeStr();
+      const shortName = getShortName();
 
-    const existingIndex = appProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase() && p.category.toLowerCase() === cat.toLowerCase());
-    let txnProduct = name;
-    let isNewProduct = false;
-    let newId = null;
-    let productPayload = null;
-    let productAction = null; // 'POST' or 'PUT'
+      const existingIndex = appProducts.findIndex(p => p && p.name && p.name.toLowerCase() === name.toLowerCase() && p.category && p.category.toLowerCase() === cat.toLowerCase());
+      let txnProduct = name;
+      let isNewProduct = false;
+      let newId = null;
+      let productPayload = null;
+      let productAction = null; // 'POST' or 'PUT'
 
-    if (existingIndex !== -1) {
-      txnProduct = appProducts[existingIndex].name;
-      newId = appProducts[existingIndex].id;
-      productPayload = { quantityDelta: qty, user: shortName };
-      productAction = 'PUT';
-    } else {
-      isNewProduct = true;
-      newId = "PROD" + String(
-        appProducts.reduce((max, p) => {
-          const num = parseInt(p.id.replace("PROD", ""), 10);
-          return (!isNaN(num) && num > max) ? num : max;
-        }, 0) + 1
-      ).padStart(2, "0");
-      productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName, branchId: writeBranchId() };
-      productAction = 'POST';
-    }
-
-    const txnId = nextTxnId();
-    const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
-    const txnPayload = {
-      id: txnId,
-      productId: newId,
-      product: txnProduct,
-      category: cat,
-      type: "Stock In",
-      quantity: Number(qty),
-      unit: unit,
-      date: dateStr,
-      time: timeStr,
-      user: shortName,
-      branchId: resolvedBranch || 'b1',
-      branch: resolvedBranch || 'b1',
-      updateStock: false
-    };
-
-    showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
-      try {
-        if (productAction === 'POST') {
-          await fetch(`${API_URL}/inventory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
-          appProducts.push(productPayload);
-        } else {
-          const siRes = await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
-          if (!siRes.ok) {
-            const errData = await siRes.json().catch(() => ({}));
-            // ── THRESHOLD GOVERNANCE: Max-Capacity Block ──────────────────────
-            if (errData.error === 'MAX_THRESHOLD_EXCEEDED' || errData.status === 'BLOCKED') {
-              // Remove confirm modal immediately
-              const confirmMod = document.getElementById('stock-in-confirm');
-              if (confirmMod) confirmMod.style.display = 'none';
-              // Inject or update blocked alert banner
-              let alertBanner = document.getElementById('si-blocked-alert');
-              if (!alertBanner) {
-                alertBanner = document.createElement('div');
-                alertBanner.id = 'si-blocked-alert';
-                alertBanner.className = 'threshold-blocked-alert';
-                const mainContent = document.querySelector('.main-content');
-                const twoCol = document.querySelector('.two-column');
-                if (mainContent && twoCol) mainContent.insertBefore(alertBanner, twoCol);
-              }
-              alertBanner.innerHTML = `
-                <div class="tba-icon"><i data-lucide="shield-x" class="lucide-icon" style="width:22px;height:22px;"></i></div>
-                <div class="tba-body">
-                  <div class="tba-title">Stock-In Blocked — Max Capacity Exceeded</div>
-                  <div class="tba-msg">${escapeHtml(errData.message || 'Transaction blocked by threshold governance.')}</div>
-                  <a href="threshold.html" class="tba-cta">
-                    <i data-lucide="sliders" class="lucide-icon" style="width:13px;height:13px;"></i>
-                    Go to Threshold Management
-                  </a>
-                </div>
-              `;
-              alertBanner.style.display = 'flex';
-              alertBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              if (window.lucide) window.lucide.createIcons({ root: alertBanner });
-              siSubmitting = false;
-              if (submitBtn) submitBtn.disabled = false;
-              return;
-            }
-            // Re-throw other errors to be caught by outer catch
-            throw errData;
+      if (existingIndex !== -1) {
+        txnProduct = appProducts[existingIndex].name;
+        newId = appProducts[existingIndex].id;
+        productPayload = { quantityDelta: qty, user: shortName };
+        productAction = 'PUT';
+      } else {
+        isNewProduct = true;
+        let maxProdNum = 0;
+        appProducts.forEach(p => {
+          if (p && p.id) {
+            const num = parseInt(String(p.id).replace(/\D/g, ""), 10);
+            if (!isNaN(num) && num > maxProdNum) maxProdNum = num;
           }
-          appProducts[existingIndex].quantity += qty;
-          appProducts[existingIndex].user = shortName;
-        }
+        });
+        newId = "PROD" + String(maxProdNum + 1).padStart(2, "0");
+        productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName, branchId: writeBranchId() };
+        productAction = 'POST';
+      }
 
-        // Clear any previous blocked alert on success
-        const prevAlert = document.getElementById('si-blocked-alert');
-        if (prevAlert) prevAlert.style.display = 'none';
+      // Generate unique transaction ID before any database / localStorage record uses it
+      const txnId = nextTxnId();
+      const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
+      const txnPayload = {
+        id: txnId,
+        productId: newId,
+        product: txnProduct,
+        category: cat,
+        type: "Stock In",
+        quantity: Number(qty),
+        unit: unit,
+        date: dateStr,
+        time: timeStr,
+        user: shortName,
+        branchId: resolvedBranch || 'b1',
+        branch: resolvedBranch || 'b1',
+        updateStock: false
+      };
 
-        const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
-        let backendTxn = null;
-        if (txnRes.ok) {
-          backendTxn = await txnRes.json().catch(() => null);
-        } else {
-          const errData = await txnRes.json().catch(() => ({}));
-          console.warn('Transaction record warning:', errData);
-        }
-
-        const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
-        txnPayload.id = effectiveTxnId;
-        appTxns.push(txnPayload);
-
-        // Update activity timeline on dashboard if visible
-        updateActivityTimeline();
-
-        // Provide Undo functionality
-        const onUndo = async () => {
-          try {
-            if (effectiveTxnId) {
-              await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
-              appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
+      showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
+        try {
+          if (productAction === 'POST') {
+            await fetch(`${API_URL}/inventory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+            appProducts.push(productPayload);
+          } else {
+            const siRes = await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+            if (!siRes.ok) {
+              const errData = await siRes.json().catch(() => ({}));
+              // ── THRESHOLD GOVERNANCE: Max-Capacity Block ──────────────────────
+              if (errData.error === 'MAX_THRESHOLD_EXCEEDED' || errData.status === 'BLOCKED') {
+                // Remove confirm modal immediately
+                const confirmMod = document.getElementById('stock-in-confirm');
+                if (confirmMod) confirmMod.style.display = 'none';
+                // Inject or update blocked alert banner
+                let alertBanner = document.getElementById('si-blocked-alert');
+                if (!alertBanner) {
+                  alertBanner = document.createElement('div');
+                  alertBanner.id = 'si-blocked-alert';
+                  alertBanner.className = 'threshold-blocked-alert';
+                  const mainContent = document.querySelector('.main-content');
+                  const twoCol = document.querySelector('.two-column');
+                  if (mainContent && twoCol) mainContent.insertBefore(alertBanner, twoCol);
+                }
+                alertBanner.innerHTML = `
+                  <div class="tba-icon"><i data-lucide="shield-x" class="lucide-icon" style="width:22px;height:22px;"></i></div>
+                  <div class="tba-body">
+                    <div class="tba-title">Stock-In Blocked — Max Capacity Exceeded</div>
+                    <div class="tba-msg">${escapeHtml(errData.message || 'Transaction blocked by threshold governance.')}</div>
+                    <a href="threshold.html" class="tba-cta">
+                      <i data-lucide="sliders" class="lucide-icon" style="width:13px;height:13px;"></i>
+                      Go to Threshold Management
+                    </a>
+                  </div>
+                `;
+                alertBanner.style.display = 'flex';
+                alertBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (window.lucide) window.lucide.createIcons({ root: alertBanner });
+                return;
+              }
+              // Re-throw other errors to be caught by outer catch
+              throw errData;
             }
+            appProducts[existingIndex].quantity += qty;
+            appProducts[existingIndex].user = shortName;
+          }
 
-            // Update activity timeline on dashboard
-            updateActivityTimeline();
+          // Clear any previous blocked alert on success
+          const prevAlert = document.getElementById('si-blocked-alert');
+          if (prevAlert) prevAlert.style.display = 'none';
 
-            const targetProdId = txnPayload.productId || newId;
-            if (isNewProduct) {
-              await fetch(`${API_URL}/inventory/${targetProdId}`, { method: "DELETE" }).catch(() => {});
-              appProducts = appProducts.filter(p => p.id !== targetProdId);
-            } else {
-              await fetch(`${API_URL}/inventory/${targetProdId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) }).catch(() => {});
-              const pMatch = appProducts.find(p => p.id === targetProdId);
-              if (pMatch) pMatch.quantity -= qty;
-            }
-            showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
-            loadRecentStockIn();
-          } catch (err) { showToast('error', 'API Error', 'Failed to undo.'); }
-        };
+          const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+          let backendTxn = null;
+          if (txnRes.ok) {
+            backendTxn = await txnRes.json().catch(() => null);
+          } else {
+            const errData = await txnRes.json().catch(() => ({}));
+            console.warn('Transaction record warning:', errData);
+          }
 
-        showToast('success', 'Stock Recorded', `${qty} ${unit} of ${txnProduct} added.`, 5000, onUndo);
-        form.reset();
+          const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
+          txnPayload.id = effectiveTxnId;
+          appTxns.push(txnPayload);
 
-        const pBox = document.getElementById("si-preview");
-        if (pBox) pBox.style.display = "none";
-        const cEl = document.getElementById("si-category");
-        const uEl = document.getElementById("si-unit");
-        if (cEl) cEl.disabled = false;
-        if (uEl) uEl.disabled = false;
+          // Update activity timeline on dashboard if visible
+          updateActivityTimeline();
 
-        loadRecentStockIn();
-      } catch (err) { showToast('error', 'API Error', 'Failed to record stock in.'); }
-      finally { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; }
-    }, function () {
+          // Provide Undo functionality
+          const onUndo = async () => {
+            try {
+              if (effectiveTxnId) {
+                await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
+                appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
+              }
+
+              // Update activity timeline on dashboard
+              updateActivityTimeline();
+
+              const targetProdId = txnPayload.productId || newId;
+              if (isNewProduct) {
+                await fetch(`${API_URL}/inventory/${targetProdId}`, { method: "DELETE" }).catch(() => {});
+                appProducts = appProducts.filter(p => p.id !== targetProdId);
+              } else {
+                await fetch(`${API_URL}/inventory/${targetProdId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) }).catch(() => {});
+                const pMatch = appProducts.find(p => p.id === targetProdId);
+                if (pMatch) pMatch.quantity -= qty;
+              }
+              showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
+              loadRecentStockIn();
+            } catch (err) { showToast('error', 'API Error', 'Failed to undo.'); }
+          };
+
+          showToast('success', 'Stock Recorded', `${qty} ${unit} of ${txnProduct} added.`, 5000, onUndo);
+          form.reset();
+
+          const pBox = document.getElementById("si-preview");
+          if (pBox) pBox.style.display = "none";
+          const cEl = document.getElementById("si-category");
+          const uEl = document.getElementById("si-unit");
+          if (cEl) cEl.disabled = false;
+          if (uEl) uEl.disabled = false;
+
+          loadRecentStockIn();
+        } catch (err) {
+          console.error("Stock In submission error:", err);
+          showToast('error', 'API Error', 'Failed to record stock in.');
+        } finally {
+          siSubmitting = false;
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      }, function () {
+        siSubmitting = false;
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    } catch (outerErr) {
+      console.error("Stock In initialization error:", outerErr);
       siSubmitting = false;
       if (submitBtn) submitBtn.disabled = false;
-    });
+    }
   });
 
   document.getElementById("si-clear")?.addEventListener("click", () => {
