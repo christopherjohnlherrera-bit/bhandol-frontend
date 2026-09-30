@@ -2591,6 +2591,7 @@ function setupStockIn() {
     if (isNaN(qty) || qty <= 0) { setFieldError(qtyEl, "Enter a valid quantity > 0."); valid = false; }
     if (!valid) { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; return; }
 
+    try {
     const dateStr = getDateStr();
     const timeStr = getTimeStr();
     const shortName = getShortName();
@@ -2619,6 +2620,7 @@ function setupStockIn() {
       productAction = 'POST';
     }
 
+    const txnId = nextTxnId();
     const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
     const txnPayload = {
       id: txnId,
@@ -2738,6 +2740,13 @@ function setupStockIn() {
       siSubmitting = false;
       if (submitBtn) submitBtn.disabled = false;
     });
+    } catch (err) {
+      // Never leave the submit button stuck disabled on an unexpected error
+      console.error("Stock In error:", err);
+      showToast('error', 'Error', 'Failed to prepare stock in.');
+      siSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    }
   });
 
   document.getElementById("si-clear")?.addEventListener("click", () => {
