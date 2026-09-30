@@ -2341,6 +2341,7 @@ function setupInventoryFilters() {
           // Keep total stock quantity in sync after edit
           const totalStockQty = appProducts.reduce((sum, p) => sum + (p.quantity || 0), 0);
           setText("total-stock-qty-inv", totalStockQty.toLocaleString());
+          window.updateSidebarNotificationBadges();
         } catch (err) {
           showToast('error', 'API Error', 'Failed to update product.');
         }
@@ -2387,6 +2388,7 @@ async function deleteProduct(id) {
       appProducts = appProducts.filter(p => p.id !== id);
       showToast('success', 'Product Deleted', `${prod.name} has been removed from inventory.`);
       loadInventory();
+      window.updateSidebarNotificationBadges();
     } catch (err) {
       showToast('error', 'API Error', 'Failed to delete product.');
     }
@@ -2734,6 +2736,7 @@ function setupStockIn() {
             }
             showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
             loadRecentStockIn();
+            window.updateSidebarNotificationBadges();
           } catch (err) { showToast('error', 'API Error', 'Failed to undo.'); }
         };
 
@@ -2748,6 +2751,7 @@ function setupStockIn() {
         if (uEl) uEl.disabled = false;
 
         loadRecentStockIn();
+        window.updateSidebarNotificationBadges();
       } catch (err) { showToast('error', 'API Error', 'Failed to record stock in.'); }
       finally { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; }
     }, function () {
@@ -3071,6 +3075,7 @@ function setupStockOut() {
             maxAllowed = 0;
 
             loadRecentStockOut();
+            window.updateSidebarNotificationBadges();
           } catch (err) { showToast('error', 'API Error', 'Undo failed'); }
         };
 
@@ -3084,6 +3089,7 @@ function setupStockOut() {
         maxAllowed = 0;
 
         loadRecentStockOut();
+        window.updateSidebarNotificationBadges();
       } catch (err) {
         console.error("Stock Out API Error Response:", err);
         // Handle server-side Low Stock Protection rejection gracefully
@@ -5478,36 +5484,100 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (page === "users.html" && userRole === "admin") { loadUsers(); setupUserManagement(); }
   if (page === "threshold.html") setupThreshold();
   if (page === "settings.html") setupSettings();
+
+  // Initial badge calculation
+  window.updateSidebarNotificationBadges();
+
+  // Background interval for real-time badge freshness
+  if (!window._sidebarBadgeInterval) {
+    window._sidebarBadgeInterval = setInterval(window.updateSidebarNotificationBadges, 15000);
+  }
 });
 
 // =============================================
 //  SIDEBAR ACTIVITY NOTIFICATION BADGES
 // =============================================
+function _isBadgeTxnToday(t) {
+  if (!t || !t.date) return false;
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear());
+  const todaySlash = `${day}/${month}/${year}`;
+  const todayIso = `${year}-${month}-${day}`;
+
+  if (t.date === todaySlash || t.date === todayIso) return true;
+  if (typeof t.date === 'string' && t.date.includes('/')) {
+    const parts = t.date.split('/');
+    if (parts.length === 3) {
+      const d = parts[0].padStart(2, '0');
+      const m = parts[1].padStart(2, '0');
+      const y = parts[2];
+      if (`${d}/${m}/${y}` === todaySlash) return true;
+    }
+  }
+  return false;
+}
+
+function _setSidebarBadgeElement(hrefPattern, count, displayText, badgeClass = 'danger', tooltip = '') {
+  const links = document.querySelectorAll(`aside.sidebar nav a[href*="${hrefPattern}"]`);
+  links.forEach(link => {
+    let badge = link.querySelector('.sidebar-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        link.appendChild(badge);
+      }
+      badge.className = `sidebar-badge ${badgeClass}`;
+      badge.textContent = displayText || String(count);
+      if (tooltip) badge.title = tooltip;
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+}
+
 window.updateSidebarNotificationBadges = async function () {
   try {
-    const res = await fetch(`${API_URL}/threshold/requests`);
-    if (!res || !res.ok) return;
-    const all = await res.json();
-    if (!Array.isArray(all)) return;
-    const pendingCount = all.filter(r => r.status === 'PENDING').length;
+    const products = (typeof getProducts === 'function' ? getProducts() : appProducts) || [];
+    const txns = (typeof getTransactions === 'function' ? getTransactions() : appTxns) || [];
+    const users = (typeof getUsers === 'function' ? getUsers() : appUsers) || [];
 
-    const thresholdLinks = document.querySelectorAll('aside.sidebar nav a[href*="threshold"]');
-    thresholdLinks.forEach(link => {
-      let badge = link.querySelector('.sidebar-badge');
-      if (pendingCount > 0) {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.className = 'sidebar-badge danger';
-          link.appendChild(badge);
+    // 1. Inventory: Active low-stock or out-of-stock item counts
+    const lowOrOutCount = products.filter(p => (typeof isProductLowStock === 'function' && isProductLowStock(p)) || p.quantity === 0).length;
+    _setSidebarBadgeElement("inventory.html", lowOrOutCount, lowOrOutCount > 0 ? `${lowOrOutCount}` : '', 'warning', `${lowOrOutCount} low or out-of-stock item(s)`);
+
+    // 2. Stock In: Today's completed/recent stock-in operations count
+    const stockInToday = txns.filter(t => t.type === "Stock In" && _isBadgeTxnToday(t)).length;
+    _setSidebarBadgeElement("stock-in.html", stockInToday, stockInToday > 0 ? `+${stockInToday}` : '', 'success', `${stockInToday} Stock In operation(s) today`);
+
+    // 3. Stock Out: Today's completed/recent stock-out operations count
+    const stockOutToday = txns.filter(t => t.type === "Stock Out" && _isBadgeTxnToday(t)).length;
+    _setSidebarBadgeElement("stock-out.html", stockOutToday, stockOutToday > 0 ? `-${stockOutToday}` : '', 'danger', `${stockOutToday} Stock Out operation(s) today`);
+
+    // 4. Transactions: Total recent activity / transactions logged today
+    const totalTxnsToday = txns.filter(_isBadgeTxnToday).length;
+    _setSidebarBadgeElement("transactions.html", totalTxnsToday, totalTxnsToday > 0 ? `${totalTxnsToday}` : '', 'info', `${totalTxnsToday} total transaction(s) today`);
+
+    // 5. User Management: Pending access / password reset requests
+    const pendingUsers = users.filter(u => u.resetRequested || u.status === 'Pending' || u.status === 'Inactive').length;
+    _setSidebarBadgeElement("users.html", pendingUsers, pendingUsers > 0 ? `${pendingUsers}` : '', 'warning', `${pendingUsers} user account(s) requiring review`);
+
+    // 6. Thresholds: Pending threshold expansion requests & governance breaches
+    let pendingThresholds = 0;
+    try {
+      const res = await fetch(`${API_URL}/threshold/requests`).catch(() => null);
+      if (res && res.ok) {
+        const allReqs = await res.json().catch(() => []);
+        if (Array.isArray(allReqs)) {
+          pendingThresholds = allReqs.filter(r => r.status === 'PENDING').length;
         }
-        badge.textContent = `! (${pendingCount})`;
-        badge.title = `${pendingCount} pending threshold expansion request(s)`;
-      } else if (badge) {
-        badge.remove();
       }
-    });
+    } catch (e) {}
+    _setSidebarBadgeElement("threshold.html", pendingThresholds, pendingThresholds > 0 ? `! (${pendingThresholds})` : '', 'danger', `${pendingThresholds} pending threshold request(s)`);
+
   } catch (err) {
-    // Fail silently
+    // Fail gracefully
   }
 };
 

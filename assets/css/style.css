@@ -1128,7 +1128,7 @@ body.is-admin td.admin-only {
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 12px;
   margin-left: auto;
   line-height: 1.2;
@@ -1137,6 +1137,30 @@ body.is-admin td.admin-only {
   color: #fca5a5;
   border: 1px solid rgba(239, 68, 68, 0.4);
   animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.sidebar-badge.danger {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.sidebar-badge.warning {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.sidebar-badge.success {
+  background: rgba(34, 197, 94, 0.22);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.sidebar-badge.info {
+  background: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 @keyframes pulse-glow {
