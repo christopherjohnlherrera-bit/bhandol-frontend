@@ -2619,6 +2619,7 @@ function setupStockIn() {
       productAction = 'POST';
     }
 
+    const txnId = nextTxnId();
     const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
     const txnPayload = {
       id: txnId,
@@ -3628,6 +3629,68 @@ function initTheme() {
 
 let _txnNetChartInstance = null;
 
+// Parse transaction date to YYYY-MM-DD ISO string safely
+function _parseTxnDateISO(t) {
+  if (!t) return '';
+  if (t.date) {
+    if (t.date.includes('/')) {
+      const parts = t.date.split('/');
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    if (t.date.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return t.date.substring(0, 10);
+    }
+  }
+  if (t.createdAt) {
+    try {
+      const d = new Date(t.createdAt);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().substring(0, 10);
+      }
+    } catch (_) {}
+  }
+  return '';
+}
+
+// Compute date ranges for the timeframe selector
+function _getTimeframeRange(timeframe) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (timeframe === 'this-month') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { from: formatISO(firstDay), to: formatISO(lastDay) };
+  }
+  if (timeframe === 'last-month') {
+    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: formatISO(firstDay), to: formatISO(lastDay) };
+  }
+  if (timeframe === 'last-30-days') {
+    const past30 = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    return { from: formatISO(past30), to: formatISO(now) };
+  }
+  return { from: '', to: '' }; // all-time
+}
+
+// Filter transactions by timeframe
+function _filterTxnsByTimeframe(txns, timeframe) {
+  if (!timeframe || timeframe === 'all-time') return txns;
+  const { from, to } = _getTimeframeRange(timeframe);
+  if (!from && !to) return txns;
+  return txns.filter(t => {
+    const iso = _parseTxnDateISO(t);
+    if (!iso) return true;
+    if (from && iso < from) return false;
+    if (to && iso > to) return false;
+    return true;
+  });
+}
+
 // Read the active date pickers from the transactions page filter bar
 function getActiveTxnDateFilter() {
   return {
@@ -3636,13 +3699,12 @@ function getActiveTxnDateFilter() {
   };
 }
 
-// Reuse same DD/MM/YYYY → YYYY-MM-DD parsing already in applyFilters
+// Filter transactions by date range
 function _filterTxnsByDate(txns, dateFrom, dateTo) {
   if (!dateFrom && !dateTo) return txns;
   return txns.filter(t => {
-    const parts = t.date.split('/');
-    if (parts.length !== 3) return true;
-    const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    const iso = _parseTxnDateISO(t);
+    if (!iso) return true;
     if (dateFrom && iso < dateFrom) return false;
     if (dateTo && iso > dateTo) return false;
     return true;
@@ -3743,12 +3805,39 @@ window.changeReportModalPage = function(tableKey, delta) {
   }
 };
 
+window._onReportTimeframeChange = function() {
+  if (_activeReportType) {
+    window.openTxnReportModal(_activeReportType, true);
+  }
+};
+
 // --- Individual report renderers ---
 
 function _renderStockInReport(txns, bodyEl) {
+  // Summary KPI Cards
+  const totalVolume = txns.reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
+  const totalRecords = txns.length;
+  const uniqueProducts = new Set(txns.map(t => t.product)).size;
+
+  const summaryHtml = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex-shrink:0;">
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total In Volume</div>
+        <div style="font-size:28px;font-weight:700;color:var(--green-600);">+${totalVolume.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total In Records</div>
+        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${totalRecords.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Unique Products</div>
+        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${uniqueProducts.toLocaleString()}</div>
+      </div>
+    </div>`;
+
   // Top 5 by total quantity stocked in
   const totals = {};
-  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + t.quantity; });
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + (Number(t.quantity) || 0); });
   const top5 = Object.entries(totals)
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, value]) => ({ name, value }));
@@ -3769,6 +3858,7 @@ function _renderStockInReport(txns, bodyEl) {
   ]);
 
   bodyEl.innerHTML = `
+    ${summaryHtml}
     ${highlightHtml}
     <div>
       <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
@@ -3785,8 +3875,29 @@ function _renderStockInReport(txns, bodyEl) {
 }
 
 function _renderStockOutReport(txns, bodyEl) {
+  // Summary KPI Cards
+  const totalVolume = txns.reduce((acc, t) => acc + Math.abs(Number(t.quantity) || 0), 0);
+  const totalRecords = txns.length;
+  const uniqueProducts = new Set(txns.map(t => t.product)).size;
+
+  const summaryHtml = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex-shrink:0;">
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Out Volume</div>
+        <div style="font-size:28px;font-weight:700;color:var(--red-600);">${totalVolume.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Out Records</div>
+        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${totalRecords.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Unique Products</div>
+        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${uniqueProducts.toLocaleString()}</div>
+      </div>
+    </div>`;
+
   const totals = {};
-  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + Math.abs(t.quantity); });
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + Math.abs(Number(t.quantity) || 0); });
   const top5 = Object.entries(totals)
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, value]) => ({ name, value }));
@@ -3801,13 +3912,13 @@ function _renderStockOutReport(txns, bodyEl) {
     t.date, t.time,
     `<strong style="color:var(--slate-700);">${t.product}</strong>`,
     categoryBadge(t.category),
-    // Always show absolute positive quantity for readability
     `<span style="font-weight:700;color:var(--red-600);">${Math.abs(t.quantity).toLocaleString()}</span>`,
     t.unit,
     t.user
   ]);
 
   bodyEl.innerHTML = `
+    ${summaryHtml}
     ${highlightHtml}
     <div>
       <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
@@ -3832,8 +3943,8 @@ function _renderNetMovementReport(txns, bodyEl) {
   const cats = {};
   txns.forEach(t => {
     if (!cats[t.category]) cats[t.category] = { in: 0, out: 0 };
-    if (t.type === 'Stock In') cats[t.category].in += t.quantity;
-    else cats[t.category].out += Math.abs(t.quantity);
+    if (t.type === 'Stock In') cats[t.category].in += (Number(t.quantity) || 0);
+    else cats[t.category].out += Math.abs(Number(t.quantity) || 0);
   });
 
   const labels = Object.keys(cats);
@@ -3934,7 +4045,6 @@ function _renderNetMovementReport(txns, bodyEl) {
           {
             label: 'Net',
             data: netData,
-            // Positive net → blue accent; negative → red tint
             backgroundColor: netData.map(v => v >= 0 ? 'rgba(59,130,246,0.75)' : 'rgba(239,68,68,0.4)'),
             borderRadius: 5,
             maxBarThickness: 32
@@ -3987,6 +4097,7 @@ window.openTxnReportModal = function (type, resetPage = true) {
   const modal = document.getElementById('txn-report-modal');
   const titleEl = document.getElementById('txn-report-title');
   const bodyEl = document.getElementById('txn-report-body');
+  const timeframeSelect = document.getElementById('txn-report-timeframe');
   if (!modal || !titleEl || !bodyEl) return;
 
   _activeReportType = type;
@@ -4000,11 +4111,9 @@ window.openTxnReportModal = function (type, resetPage = true) {
   if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
   bodyEl.innerHTML = '';
 
-  // Grab the active date filter from the page
-  const { dateFrom, dateTo } = getActiveTxnDateFilter();
-  // Use already-filtered set so category/search/type dropdowns are also respected
+  const timeframe = timeframeSelect ? timeframeSelect.value : 'this-month';
   const baseTxns = currentFilteredTxns || getTransactions();
-  const dateTxns = _filterTxnsByDate(baseTxns, dateFrom, dateTo);
+  const dateTxns = _filterTxnsByTimeframe(baseTxns, timeframe);
 
   if (type === 'in') {
     const txns = dateTxns.filter(t => t.type === 'Stock In');
