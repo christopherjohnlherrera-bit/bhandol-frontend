@@ -151,16 +151,11 @@ function getProducts() { return appProducts; }
 function getTransactions() { return appTxns; }
 
 function nextTxnId() {
-  const txns = getTransactions() || [];
+  const txns = getTransactions();
   let maxNum = 0;
   txns.forEach(t => {
-    if (t && t.id) {
-      const match = String(t.id).match(/\d+/);
-      if (match) {
-        const num = parseInt(match[0], 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-      }
-    }
+    const num = parseInt(t.id.replace("TXN", ""), 10);
+    if (!isNaN(num) && num > maxNum) maxNum = num;
   });
   return "TXN" + String(maxNum + 1).padStart(2, "0");
 }
@@ -168,8 +163,8 @@ function nextTxnId() {
 function isTxnIdGreaterThan(idA, idB) {
   if (!idA) return false;
   if (!idB) return true;
-  const numA = parseInt(String(idA).replace(/\D/g, ""), 10) || 0;
-  const numB = parseInt(String(idB).replace(/\D/g, ""), 10) || 0;
+  const numA = parseInt(idA.replace("TXN", ""), 10);
+  const numB = parseInt(idB.replace("TXN", ""), 10);
   return numA > numB;
 }
 
@@ -2577,195 +2572,178 @@ function setupStockIn() {
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
 
+    clearFormErrors(form);
+
+    const nameEl = document.getElementById("si-name");
+    const catEl = document.getElementById("si-category");
+    const unitEl = document.getElementById("si-unit");
+    const qtyEl = document.getElementById("si-quantity");
+
+    const name = nameEl.value.trim();
+    const cat = catEl.value.trim();
+    const unit = unitEl.value.trim();
+    const qty = parseInt(qtyEl.value);
+
+    let valid = true;
+    if (!name || name.length === 0) { setFieldError(nameEl, "Product name is required."); valid = false; }
+    if (!cat || cat.length < 2) { setFieldError(catEl, "Valid category required."); valid = false; }
+    if (!unit || unit.length < 2) { setFieldError(unitEl, "Valid unit required."); valid = false; }
+    if (isNaN(qty) || qty <= 0) { setFieldError(qtyEl, "Enter a valid quantity > 0."); valid = false; }
+    if (!valid) { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; return; }
+
     try {
-      clearFormErrors(form);
+    const dateStr = getDateStr();
+    const timeStr = getTimeStr();
+    const shortName = getShortName();
 
-      const nameEl = document.getElementById("si-name");
-      const catEl = document.getElementById("si-category");
-      const unitEl = document.getElementById("si-unit");
-      const qtyEl = document.getElementById("si-quantity");
+    const existingIndex = appProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase() && p.category.toLowerCase() === cat.toLowerCase());
+    let txnProduct = name;
+    let isNewProduct = false;
+    let newId = null;
+    let productPayload = null;
+    let productAction = null; // 'POST' or 'PUT'
 
-      const name = nameEl ? nameEl.value.trim() : "";
-      const cat = catEl ? catEl.value.trim() : "";
-      const unit = unitEl ? unitEl.value.trim() : "";
-      const qty = parseInt(qtyEl ? qtyEl.value : "0", 10);
+    if (existingIndex !== -1) {
+      txnProduct = appProducts[existingIndex].name;
+      newId = appProducts[existingIndex].id;
+      productPayload = { quantityDelta: qty, user: shortName };
+      productAction = 'PUT';
+    } else {
+      isNewProduct = true;
+      newId = "PROD" + String(
+        appProducts.reduce((max, p) => {
+          const num = parseInt(p.id.replace("PROD", ""), 10);
+          return (!isNaN(num) && num > max) ? num : max;
+        }, 0) + 1
+      ).padStart(2, "0");
+      productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName, branchId: writeBranchId() };
+      productAction = 'POST';
+    }
 
-      let valid = true;
-      if (!name || name.length === 0) { setFieldError(nameEl, "Product name is required."); valid = false; }
-      if (!cat || cat.length < 2) { setFieldError(catEl, "Valid category required."); valid = false; }
-      if (!unit || unit.length < 2) { setFieldError(unitEl, "Valid unit required."); valid = false; }
-      if (isNaN(qty) || qty <= 0) { setFieldError(qtyEl, "Enter a valid quantity > 0."); valid = false; }
-      if (!valid) {
-        siSubmitting = false;
-        if (submitBtn) submitBtn.disabled = false;
-        return;
-      }
+    const txnId = nextTxnId();
+    const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
+    const txnPayload = {
+      id: txnId,
+      productId: newId,
+      product: txnProduct,
+      category: cat,
+      type: "Stock In",
+      quantity: Number(qty),
+      unit: unit,
+      date: dateStr,
+      time: timeStr,
+      user: shortName,
+      branchId: resolvedBranch || 'b1',
+      branch: resolvedBranch || 'b1',
+      updateStock: false
+    };
 
-      const dateStr = getDateStr();
-      const timeStr = getTimeStr();
-      const shortName = getShortName();
-
-      const existingIndex = appProducts.findIndex(p => p && p.name && p.name.toLowerCase() === name.toLowerCase() && p.category && p.category.toLowerCase() === cat.toLowerCase());
-      let txnProduct = name;
-      let isNewProduct = false;
-      let newId = null;
-      let productPayload = null;
-      let productAction = null; // 'POST' or 'PUT'
-
-      if (existingIndex !== -1) {
-        txnProduct = appProducts[existingIndex].name;
-        newId = appProducts[existingIndex].id;
-        productPayload = { quantityDelta: qty, user: shortName };
-        productAction = 'PUT';
-      } else {
-        isNewProduct = true;
-        let maxProdNum = 0;
-        appProducts.forEach(p => {
-          if (p && p.id) {
-            const num = parseInt(String(p.id).replace(/\D/g, ""), 10);
-            if (!isNaN(num) && num > maxProdNum) maxProdNum = num;
-          }
-        });
-        newId = "PROD" + String(maxProdNum + 1).padStart(2, "0");
-        productPayload = { id: newId, name, category: cat, unit, quantity: qty, dateAdded: dateStr, user: shortName, branchId: writeBranchId() };
-        productAction = 'POST';
-      }
-
-      // Generate unique transaction ID before any database / localStorage record uses it
-      const txnId = nextTxnId();
-      const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
-      const txnPayload = {
-        id: txnId,
-        productId: newId,
-        product: txnProduct,
-        category: cat,
-        type: "Stock In",
-        quantity: Number(qty),
-        unit: unit,
-        date: dateStr,
-        time: timeStr,
-        user: shortName,
-        branchId: resolvedBranch || 'b1',
-        branch: resolvedBranch || 'b1',
-        updateStock: false
-      };
-
-      showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
-        try {
-          if (productAction === 'POST') {
-            await fetch(`${API_URL}/inventory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
-            appProducts.push(productPayload);
-          } else {
-            const siRes = await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
-            if (!siRes.ok) {
-              const errData = await siRes.json().catch(() => ({}));
-              // ── THRESHOLD GOVERNANCE: Max-Capacity Block ──────────────────────
-              if (errData.error === 'MAX_THRESHOLD_EXCEEDED' || errData.status === 'BLOCKED') {
-                // Remove confirm modal immediately
-                const confirmMod = document.getElementById('stock-in-confirm');
-                if (confirmMod) confirmMod.style.display = 'none';
-                // Inject or update blocked alert banner
-                let alertBanner = document.getElementById('si-blocked-alert');
-                if (!alertBanner) {
-                  alertBanner = document.createElement('div');
-                  alertBanner.id = 'si-blocked-alert';
-                  alertBanner.className = 'threshold-blocked-alert';
-                  const mainContent = document.querySelector('.main-content');
-                  const twoCol = document.querySelector('.two-column');
-                  if (mainContent && twoCol) mainContent.insertBefore(alertBanner, twoCol);
-                }
-                alertBanner.innerHTML = `
-                  <div class="tba-icon"><i data-lucide="shield-x" class="lucide-icon" style="width:22px;height:22px;"></i></div>
-                  <div class="tba-body">
-                    <div class="tba-title">Stock-In Blocked — Max Capacity Exceeded</div>
-                    <div class="tba-msg">${escapeHtml(errData.message || 'Transaction blocked by threshold governance.')}</div>
-                    <a href="threshold.html" class="tba-cta">
-                      <i data-lucide="sliders" class="lucide-icon" style="width:13px;height:13px;"></i>
-                      Go to Threshold Management
-                    </a>
-                  </div>
-                `;
-                alertBanner.style.display = 'flex';
-                alertBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (window.lucide) window.lucide.createIcons({ root: alertBanner });
-                return;
+    showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
+      try {
+        if (productAction === 'POST') {
+          await fetch(`${API_URL}/inventory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+          appProducts.push(productPayload);
+        } else {
+          const siRes = await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(productPayload) });
+          if (!siRes.ok) {
+            const errData = await siRes.json().catch(() => ({}));
+            // ── THRESHOLD GOVERNANCE: Max-Capacity Block ──────────────────────
+            if (errData.error === 'MAX_THRESHOLD_EXCEEDED' || errData.status === 'BLOCKED') {
+              // Remove confirm modal immediately
+              const confirmMod = document.getElementById('stock-in-confirm');
+              if (confirmMod) confirmMod.style.display = 'none';
+              // Inject or update blocked alert banner
+              let alertBanner = document.getElementById('si-blocked-alert');
+              if (!alertBanner) {
+                alertBanner = document.createElement('div');
+                alertBanner.id = 'si-blocked-alert';
+                alertBanner.className = 'threshold-blocked-alert';
+                const mainContent = document.querySelector('.main-content');
+                const twoCol = document.querySelector('.two-column');
+                if (mainContent && twoCol) mainContent.insertBefore(alertBanner, twoCol);
               }
-              // Re-throw other errors to be caught by outer catch
-              throw errData;
+              alertBanner.innerHTML = `
+                <div class="tba-icon"><i data-lucide="shield-x" class="lucide-icon" style="width:22px;height:22px;"></i></div>
+                <div class="tba-body">
+                  <div class="tba-title">Stock-In Blocked — Max Capacity Exceeded</div>
+                  <div class="tba-msg">${escapeHtml(errData.message || 'Transaction blocked by threshold governance.')}</div>
+                  <a href="threshold.html" class="tba-cta">
+                    <i data-lucide="sliders" class="lucide-icon" style="width:13px;height:13px;"></i>
+                    Go to Threshold Management
+                  </a>
+                </div>
+              `;
+              alertBanner.style.display = 'flex';
+              alertBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              if (window.lucide) window.lucide.createIcons({ root: alertBanner });
+              siSubmitting = false;
+              if (submitBtn) submitBtn.disabled = false;
+              return;
             }
-            appProducts[existingIndex].quantity += qty;
-            appProducts[existingIndex].user = shortName;
+            // Re-throw other errors to be caught by outer catch
+            throw errData;
           }
-
-          // Clear any previous blocked alert on success
-          const prevAlert = document.getElementById('si-blocked-alert');
-          if (prevAlert) prevAlert.style.display = 'none';
-
-          const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
-          let backendTxn = null;
-          if (txnRes.ok) {
-            backendTxn = await txnRes.json().catch(() => null);
-          } else {
-            const errData = await txnRes.json().catch(() => ({}));
-            console.warn('Transaction record warning:', errData);
-          }
-
-          const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
-          txnPayload.id = effectiveTxnId;
-          appTxns.push(txnPayload);
-
-          // Update activity timeline on dashboard if visible
-          updateActivityTimeline();
-
-          // Provide Undo functionality
-          const onUndo = async () => {
-            try {
-              if (effectiveTxnId) {
-                await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
-                appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
-              }
-
-              // Update activity timeline on dashboard
-              updateActivityTimeline();
-
-              const targetProdId = txnPayload.productId || newId;
-              if (isNewProduct) {
-                await fetch(`${API_URL}/inventory/${targetProdId}`, { method: "DELETE" }).catch(() => {});
-                appProducts = appProducts.filter(p => p.id !== targetProdId);
-              } else {
-                await fetch(`${API_URL}/inventory/${targetProdId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) }).catch(() => {});
-                const pMatch = appProducts.find(p => p.id === targetProdId);
-                if (pMatch) pMatch.quantity -= qty;
-              }
-              showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
-              loadRecentStockIn();
-            } catch (err) { showToast('error', 'API Error', 'Failed to undo.'); }
-          };
-
-          showToast('success', 'Stock Recorded', `${qty} ${unit} of ${txnProduct} added.`, 5000, onUndo);
-          form.reset();
-
-          const pBox = document.getElementById("si-preview");
-          if (pBox) pBox.style.display = "none";
-          const cEl = document.getElementById("si-category");
-          const uEl = document.getElementById("si-unit");
-          if (cEl) cEl.disabled = false;
-          if (uEl) uEl.disabled = false;
-
-          loadRecentStockIn();
-        } catch (err) {
-          console.error("Stock In submission error:", err);
-          showToast('error', 'API Error', 'Failed to record stock in.');
-        } finally {
-          siSubmitting = false;
-          if (submitBtn) submitBtn.disabled = false;
+          appProducts[existingIndex].quantity += qty;
+          appProducts[existingIndex].user = shortName;
         }
-      }, function () {
-        siSubmitting = false;
-        if (submitBtn) submitBtn.disabled = false;
-      });
-    } catch (outerErr) {
-      console.error("Stock In initialization error:", outerErr);
+
+        // Clear any previous blocked alert on success
+        const prevAlert = document.getElementById('si-blocked-alert');
+        if (prevAlert) prevAlert.style.display = 'none';
+
+        const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+        if (!txnRes.ok) {
+          const errData = await txnRes.json().catch(() => ({}));
+          console.warn('Transaction record warning:', errData);
+        }
+        appTxns.push(txnPayload);
+
+        // Update activity timeline on dashboard if visible
+        updateActivityTimeline();
+
+        // Provide Undo functionality
+        const onUndo = async () => {
+          try {
+            await fetch(`${API_URL}/transactions/${txnId}`, { method: "DELETE" });
+            appTxns = appTxns.filter(t => t.id !== txnId);
+
+            // Update activity timeline on dashboard
+            updateActivityTimeline();
+
+            if (isNewProduct) {
+              await fetch(`${API_URL}/inventory/${newId}`, { method: "DELETE" });
+              appProducts = appProducts.filter(p => p.id !== newId);
+            } else {
+              await fetch(`${API_URL}/inventory/${newId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: -qty }) });
+              const pMatch = appProducts.find(p => p.id === newId);
+              if (pMatch) pMatch.quantity -= qty;
+            }
+            showToast('info', 'Action Undone', `Stock In of ${qty} ${unit} ${txnProduct} was reverted.`, 3000);
+            loadRecentStockIn();
+          } catch (err) { showToast('error', 'API Error', 'Failed to undo.'); }
+        };
+
+        showToast('success', 'Stock Recorded', `${qty} ${unit} of ${txnProduct} added.`, 5000, onUndo);
+        form.reset();
+
+        const pBox = document.getElementById("si-preview");
+        if (pBox) pBox.style.display = "none";
+        const cEl = document.getElementById("si-category");
+        const uEl = document.getElementById("si-unit");
+        if (cEl) cEl.disabled = false;
+        if (uEl) uEl.disabled = false;
+
+        loadRecentStockIn();
+      } catch (err) { showToast('error', 'API Error', 'Failed to record stock in.'); }
+      finally { siSubmitting = false; if (submitBtn) submitBtn.disabled = false; }
+    }, function () {
+      siSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    });
+    } catch (err) {
+      // Never leave the submit button stuck disabled on an unexpected error
+      console.error("Stock In error:", err);
+      showToast('error', 'Error', 'Failed to prepare stock in.');
       siSubmitting = false;
       if (submitBtn) submitBtn.disabled = false;
     }
@@ -3050,16 +3028,10 @@ function setupStockOut() {
         prod.quantity -= qty;
 
         const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
-        let backendTxn = null;
-        if (txnRes.ok) {
-          backendTxn = await txnRes.json().catch(() => null);
-        } else {
+        if (!txnRes.ok) {
           const errData = await txnRes.json().catch(() => ({}));
           console.warn('Transaction record warning:', errData);
         }
-
-        const effectiveTxnId = (backendTxn && (backendTxn._id || backendTxn.txnId || backendTxn.id)) || txnId;
-        txnPayload.id = effectiveTxnId;
         appTxns.push(txnPayload);
 
         // Update activity timeline on dashboard if visible
@@ -3067,15 +3039,13 @@ function setupStockOut() {
 
         const onUndo = async () => {
           try {
-            if (effectiveTxnId) {
-              await fetch(`${API_URL}/transactions/${effectiveTxnId}`, { method: "DELETE" }).catch(() => {});
-              appTxns = appTxns.filter(t => t.id !== effectiveTxnId);
-            }
+            await fetch(`${API_URL}/transactions/${txnId}`, { method: "DELETE" });
+            appTxns = appTxns.filter(t => t.id !== txnId);
 
             // Update activity timeline on dashboard
             updateActivityTimeline();
 
-            await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: qty }) }).catch(() => {});
+            await fetch(`${API_URL}/inventory/${prodId}/quantity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantityDelta: qty }) });
             prod.quantity += qty;
 
             showToast('info', 'Action Undone', `Stock Out of ${qty} ${prod.unit} ${prod.name} reverted.`, 3000);
@@ -3667,68 +3637,6 @@ function initTheme() {
 
 let _txnNetChartInstance = null;
 
-// Parse transaction date to YYYY-MM-DD ISO string safely
-function _parseTxnDateISO(t) {
-  if (!t) return '';
-  if (t.date) {
-    if (t.date.includes('/')) {
-      const parts = t.date.split('/');
-      if (parts.length === 3) {
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      }
-    }
-    if (t.date.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return t.date.substring(0, 10);
-    }
-  }
-  if (t.createdAt) {
-    try {
-      const d = new Date(t.createdAt);
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().substring(0, 10);
-      }
-    } catch (_) {}
-  }
-  return '';
-}
-
-// Compute date ranges for the timeframe selector
-function _getTimeframeRange(timeframe) {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const formatISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  if (timeframe === 'this-month') {
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return { from: formatISO(firstDay), to: formatISO(lastDay) };
-  }
-  if (timeframe === 'last-month') {
-    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { from: formatISO(firstDay), to: formatISO(lastDay) };
-  }
-  if (timeframe === 'last-30-days') {
-    const past30 = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-    return { from: formatISO(past30), to: formatISO(now) };
-  }
-  return { from: '', to: '' }; // all-time
-}
-
-// Filter transactions by timeframe
-function _filterTxnsByTimeframe(txns, timeframe) {
-  if (!timeframe || timeframe === 'all-time') return txns;
-  const { from, to } = _getTimeframeRange(timeframe);
-  if (!from && !to) return txns;
-  return txns.filter(t => {
-    const iso = _parseTxnDateISO(t);
-    if (!iso) return true;
-    if (from && iso < from) return false;
-    if (to && iso > to) return false;
-    return true;
-  });
-}
-
 // Read the active date pickers from the transactions page filter bar
 function getActiveTxnDateFilter() {
   return {
@@ -3737,12 +3645,13 @@ function getActiveTxnDateFilter() {
   };
 }
 
-// Filter transactions by date range
+// Reuse same DD/MM/YYYY → YYYY-MM-DD parsing already in applyFilters
 function _filterTxnsByDate(txns, dateFrom, dateTo) {
   if (!dateFrom && !dateTo) return txns;
   return txns.filter(t => {
-    const iso = _parseTxnDateISO(t);
-    if (!iso) return true;
+    const parts = t.date.split('/');
+    if (parts.length !== 3) return true;
+    const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
     if (dateFrom && iso < dateFrom) return false;
     if (dateTo && iso > dateTo) return false;
     return true;
@@ -3843,39 +3752,12 @@ window.changeReportModalPage = function(tableKey, delta) {
   }
 };
 
-window._onReportTimeframeChange = function() {
-  if (_activeReportType) {
-    window.openTxnReportModal(_activeReportType, true);
-  }
-};
-
 // --- Individual report renderers ---
 
 function _renderStockInReport(txns, bodyEl) {
-  // Summary KPI Cards
-  const totalVolume = txns.reduce((acc, t) => acc + (Number(t.quantity) || 0), 0);
-  const totalRecords = txns.length;
-  const uniqueProducts = new Set(txns.map(t => t.product)).size;
-
-  const summaryHtml = `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex-shrink:0;">
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total In Volume</div>
-        <div style="font-size:28px;font-weight:700;color:var(--green-600);">+${totalVolume.toLocaleString()}</div>
-      </div>
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total In Records</div>
-        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${totalRecords.toLocaleString()}</div>
-      </div>
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Unique Products</div>
-        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${uniqueProducts.toLocaleString()}</div>
-      </div>
-    </div>`;
-
   // Top 5 by total quantity stocked in
   const totals = {};
-  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + (Number(t.quantity) || 0); });
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + t.quantity; });
   const top5 = Object.entries(totals)
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, value]) => ({ name, value }));
@@ -3896,7 +3778,6 @@ function _renderStockInReport(txns, bodyEl) {
   ]);
 
   bodyEl.innerHTML = `
-    ${summaryHtml}
     ${highlightHtml}
     <div>
       <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
@@ -3913,29 +3794,8 @@ function _renderStockInReport(txns, bodyEl) {
 }
 
 function _renderStockOutReport(txns, bodyEl) {
-  // Summary KPI Cards
-  const totalVolume = txns.reduce((acc, t) => acc + Math.abs(Number(t.quantity) || 0), 0);
-  const totalRecords = txns.length;
-  const uniqueProducts = new Set(txns.map(t => t.product)).size;
-
-  const summaryHtml = `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex-shrink:0;">
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Out Volume</div>
-        <div style="font-size:28px;font-weight:700;color:var(--red-600);">${totalVolume.toLocaleString()}</div>
-      </div>
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Total Out Records</div>
-        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${totalRecords.toLocaleString()}</div>
-      </div>
-      <div style="background:var(--surface-strong);border-radius:var(--radius-md);padding:16px 20px;border:1px solid var(--surface-border);text-align:center;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);margin-bottom:6px;">Unique Products</div>
-        <div style="font-size:28px;font-weight:700;color:var(--slate-700);">${uniqueProducts.toLocaleString()}</div>
-      </div>
-    </div>`;
-
   const totals = {};
-  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + Math.abs(Number(t.quantity) || 0); });
+  txns.forEach(t => { totals[t.product] = (totals[t.product] || 0) + Math.abs(t.quantity); });
   const top5 = Object.entries(totals)
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, value]) => ({ name, value }));
@@ -3950,13 +3810,13 @@ function _renderStockOutReport(txns, bodyEl) {
     t.date, t.time,
     `<strong style="color:var(--slate-700);">${t.product}</strong>`,
     categoryBadge(t.category),
+    // Always show absolute positive quantity for readability
     `<span style="font-weight:700;color:var(--red-600);">${Math.abs(t.quantity).toLocaleString()}</span>`,
     t.unit,
     t.user
   ]);
 
   bodyEl.innerHTML = `
-    ${summaryHtml}
     ${highlightHtml}
     <div>
       <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.7px;color:var(--slate-500);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
@@ -3981,8 +3841,8 @@ function _renderNetMovementReport(txns, bodyEl) {
   const cats = {};
   txns.forEach(t => {
     if (!cats[t.category]) cats[t.category] = { in: 0, out: 0 };
-    if (t.type === 'Stock In') cats[t.category].in += (Number(t.quantity) || 0);
-    else cats[t.category].out += Math.abs(Number(t.quantity) || 0);
+    if (t.type === 'Stock In') cats[t.category].in += t.quantity;
+    else cats[t.category].out += Math.abs(t.quantity);
   });
 
   const labels = Object.keys(cats);
@@ -4083,6 +3943,7 @@ function _renderNetMovementReport(txns, bodyEl) {
           {
             label: 'Net',
             data: netData,
+            // Positive net → blue accent; negative → red tint
             backgroundColor: netData.map(v => v >= 0 ? 'rgba(59,130,246,0.75)' : 'rgba(239,68,68,0.4)'),
             borderRadius: 5,
             maxBarThickness: 32
@@ -4135,7 +3996,6 @@ window.openTxnReportModal = function (type, resetPage = true) {
   const modal = document.getElementById('txn-report-modal');
   const titleEl = document.getElementById('txn-report-title');
   const bodyEl = document.getElementById('txn-report-body');
-  const timeframeSelect = document.getElementById('txn-report-timeframe');
   if (!modal || !titleEl || !bodyEl) return;
 
   _activeReportType = type;
@@ -4149,9 +4009,11 @@ window.openTxnReportModal = function (type, resetPage = true) {
   if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
   bodyEl.innerHTML = '';
 
-  const timeframe = timeframeSelect ? timeframeSelect.value : 'this-month';
+  // Grab the active date filter from the page
+  const { dateFrom, dateTo } = getActiveTxnDateFilter();
+  // Use already-filtered set so category/search/type dropdowns are also respected
   const baseTxns = currentFilteredTxns || getTransactions();
-  const dateTxns = _filterTxnsByTimeframe(baseTxns, timeframe);
+  const dateTxns = _filterTxnsByDate(baseTxns, dateFrom, dateTo);
 
   if (type === 'in') {
     const txns = dateTxns.filter(t => t.type === 'Stock In');
