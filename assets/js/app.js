@@ -2619,8 +2619,22 @@ function setupStockIn() {
       productAction = 'POST';
     }
 
-    const txnId = nextTxnId();
-    const txnPayload = { id: txnId, product: txnProduct, category: cat, type: "Stock In", quantity: qty, unit, date: dateStr, time: timeStr, user: shortName, branchId: writeBranchId() };
+    const resolvedBranch = writeBranchId() || (existingIndex !== -1 ? appProducts[existingIndex]?.branchId : null) || (getUserRole() !== 'admin' ? null : 'b1');
+    const txnPayload = {
+      id: txnId,
+      productId: newId,
+      product: txnProduct,
+      category: cat,
+      type: "Stock In",
+      quantity: Number(qty),
+      unit: unit,
+      date: dateStr,
+      time: timeStr,
+      user: shortName,
+      branchId: resolvedBranch || 'b1',
+      branch: resolvedBranch || 'b1',
+      updateStock: false
+    };
 
     showStockInConfirm(txnProduct, cat, qty, existingIndex !== -1 ? appProducts[existingIndex].quantity : 0, unit, async function () {
       try {
@@ -2675,7 +2689,11 @@ function setupStockIn() {
         const prevAlert = document.getElementById('si-blocked-alert');
         if (prevAlert) prevAlert.style.display = 'none';
 
-        await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+        const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+        if (!txnRes.ok) {
+          const errData = await txnRes.json().catch(() => ({}));
+          console.warn('Transaction record warning:', errData);
+        }
         appTxns.push(txnPayload);
 
         // Update activity timeline on dashboard if visible
@@ -2953,7 +2971,22 @@ function setupStockOut() {
 
     showStockOutConfirm(prod, qty, async function () {
       const txnId = nextTxnId();
-      const txnPayload = { id: txnId, product: prod.name, category: prod.category, type: "Stock Out", quantity: qty, unit: prod.unit, date: getDateStr(), time: getTimeStr(), user: getShortName(), branchId: writeBranchId() };
+      const resolvedBranch = writeBranchId() || prod.branchId || (getUserRole() !== 'admin' ? null : 'b1');
+      const txnPayload = {
+        id: txnId,
+        productId: prod.id || prodId,
+        product: prod.name,
+        category: prod.category,
+        type: "Stock Out",
+        quantity: Number(qty),
+        unit: prod.unit,
+        date: getDateStr(),
+        time: getTimeStr(),
+        user: getShortName(),
+        branchId: resolvedBranch || 'b1',
+        branch: resolvedBranch || 'b1',
+        updateStock: false
+      };
 
       try {
         const negativeQty = parseInt("-" + qty, 10);
@@ -2985,7 +3018,11 @@ function setupStockOut() {
         }
         prod.quantity -= qty;
 
-        await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+        const txnRes = await fetch(`${API_URL}/transactions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(txnPayload) });
+        if (!txnRes.ok) {
+          const errData = await txnRes.json().catch(() => ({}));
+          console.warn('Transaction record warning:', errData);
+        }
         appTxns.push(txnPayload);
 
         // Update activity timeline on dashboard if visible
