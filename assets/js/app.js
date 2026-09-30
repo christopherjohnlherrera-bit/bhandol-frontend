@@ -2,6 +2,20 @@
 //  BHANDOL HARDWARE — app.js (Enhanced UX - Phase 4) - FULL STACK REFACTOR
 // =============================================
 
+// Immediately apply persisted theme to prevent FOIT
+(function () {
+  try {
+    const savedTheme = localStorage.getItem("theme");
+    const isDark = savedTheme
+      ? savedTheme === "dark"
+      : (localStorage.getItem("bhandolTheme") === "dark" || localStorage.getItem("darkMode") === "true");
+    if (isDark && document.documentElement) {
+      document.documentElement.classList.add("dark", "dark-mode");
+      if (document.body) document.body.classList.add("dark-mode");
+    }
+  } catch (e) {}
+})();
+
 // --- STATE ---
 let appUsers = [];
 let appProducts = [];
@@ -3590,13 +3604,31 @@ function updateThemeUI(isDark) {
   }
 }
 
+function applyTheme(isDark) {
+  if (document.documentElement) {
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.classList.toggle("dark-mode", isDark);
+  }
+  if (document.body) {
+    document.body.classList.toggle("dark", isDark);
+    document.body.classList.toggle("dark-mode", isDark);
+  }
+  updateThemeUI(isDark);
+}
+
 function toggleTheme() {
-  document.body.classList.toggle("dark-mode");
-  const isNowDark = document.body.classList.contains("dark-mode");
+  const isCurrentlyDark = document.documentElement.classList.contains("dark") || 
+                          document.documentElement.classList.contains("dark-mode") ||
+                          document.body.classList.contains("dark-mode");
+  const isNowDark = !isCurrentlyDark;
   const mode = isNowDark ? "dark" : "light";
+
+  // Persist across page reloads and module switching
+  localStorage.setItem("theme", mode);
   localStorage.setItem("bhandolTheme", mode);
   localStorage.setItem("darkMode", String(isNowDark));
-  updateThemeUI(isNowDark);
+
+  applyTheme(isNowDark);
 
   // Dynamically push the new contrast border color to the dashboard pie chart if it exists
   if (window.dashboardPieChart) {
@@ -3622,13 +3654,12 @@ function toggleTheme() {
 }
 
 function initTheme() {
-  const isDark = localStorage.getItem("bhandolTheme") === "dark" || localStorage.getItem("darkMode") === "true";
-  if (isDark) {
-    document.body.classList.add("dark-mode");
-  } else {
-    document.body.classList.remove("dark-mode");
-  }
-  updateThemeUI(isDark);
+  const savedTheme = localStorage.getItem("theme");
+  const isDark = savedTheme 
+    ? savedTheme === "dark" 
+    : (localStorage.getItem("bhandolTheme") === "dark" || localStorage.getItem("darkMode") === "true");
+
+  applyTheme(isDark);
 
   const sidebarToggle = document.getElementById("sidebar-theme-toggle");
   if (sidebarToggle && !sidebarToggle.dataset.themeBound) {
