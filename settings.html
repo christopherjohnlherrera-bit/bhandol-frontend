@@ -183,7 +183,7 @@
                 </div>
 
                 <!-- CARD 3: GOVERNANCE & UTILITIES SHORTCUT -->
-                <div class="card" style="border-left: 4px solid var(--blue-500);">
+                <div class="card" style="border-left: 4px solid var(--blue-500); margin-bottom: 24px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                         <div>
                             <h3 style="margin: 0 0 4px 0; font-size: 15px; color: var(--slate-800);">
@@ -200,9 +200,74 @@
                     </div>
                 </div>
 
+                <!-- CARD 4: DANGER ZONE - DATA WIPE & SYSTEM RESET -->
+                <div class="card admin-only" id="danger-zone-card" style="border-left: 4px solid var(--red-500); margin-bottom: 24px;">
+                    <h2 style="margin-bottom: 4px; display: flex; align-items: center; gap: 8px; color: var(--red-600);">
+                        <i data-lucide="alert-octagon" class="lucide-icon"></i> Danger Zone: Clear Data / System Wipe
+                    </h2>
+                    <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 20px;">
+                        Permanently erase inventory items, transactions, and audit records for a selected branch or across all branches. This action cannot be undone.
+                    </p>
+
+                    <div style="margin-bottom: 20px;">
+                        <label for="wipe-scope-select" style="display: block; font-weight: 600; font-size: 13.5px; margin-bottom: 8px; color: var(--slate-700);">
+                            Target Data Wipe Scope:
+                        </label>
+                        <select id="wipe-scope-select" style="min-width: 280px; padding: 9px 14px; font-size: 14px; font-weight: 500; border: 1px solid var(--surface-border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--slate-800); outline: none; cursor: pointer;">
+                            <option value="Consolidated" selected>Consolidated (All Branches)</option>
+                            <option value="Montalban">Montalban Branch</option>
+                            <option value="Luzon">Luzon Branch</option>
+                        </select>
+                    </div>
+
+                    <div style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 20px;">
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <i data-lucide="alert-triangle" class="lucide-icon" style="color: var(--red-600); width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px;"></i>
+                            <div style="font-size: 13px; color: var(--slate-600); line-height: 1.5;" id="wipe-advisory-text">
+                                <strong>High Risk Operation:</strong> Wiping data will permanently delete inventory, transaction records, and request history for the chosen branch scope.
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="danger-btn" id="btn-open-wipe-modal" style="width: auto; padding: 10px 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                        <i data-lucide="trash-2" class="lucide-icon"></i> Wipe System Data...
+                    </button>
+                </div>
+
             </div>
 
         </main>
+    </div>
+
+    <!-- GITHUB-STYLE DATA WIPE CONFIRMATION MODAL -->
+    <div id="wipe-confirm-modal" class="modal" style="display:none; align-items:center; justify-content:center; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; backdrop-filter:blur(4px);">
+        <div class="modal-content" style="max-width:480px; width:90%; background:var(--surface); border:1px solid var(--surface-border-strong); border-radius:var(--radius-md); padding:28px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                <div style="width:40px; height:40px; border-radius:50%; background:rgba(239,68,68,0.15); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i data-lucide="alert-triangle" class="lucide-icon" style="color:var(--red-600); width:22px; height:22px;"></i>
+                </div>
+                <div>
+                    <h3 style="margin:0; font-size:18px; color:var(--slate-800);">Confirm Data Wipe</h3>
+                    <p style="margin:0; font-size:13px; color:var(--slate-500);">Irreversible system destruction</p>
+                </div>
+            </div>
+            
+            <p style="font-size:13.5px; color:var(--slate-600); line-height:1.5; margin-bottom:16px;" id="wipe-modal-warning">
+                This will permanently delete all records for <strong id="wipe-target-name">Consolidated (All Branches)</strong>.
+            </p>
+
+            <div style="background:var(--surface-alt); border:1px solid var(--surface-border); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px;">
+                <p style="font-size:12.5px; color:var(--slate-600); margin:0 0 6px 0;">To confirm, please type <strong id="wipe-required-phrase" style="color:var(--red-600); font-family:monospace; user-select:all;">delete all data for Consolidated</strong> below:</p>
+                <input type="text" id="wipe-confirm-input" placeholder="Type the required phrase..." autocomplete="off" style="width:100%; padding:9px 12px; font-size:13.5px; border:1.5px solid var(--surface-border-strong); border-radius:var(--radius-sm); background:var(--surface); color:var(--slate-800); outline:none; box-sizing:border-box;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="secondary-btn" id="btn-wipe-cancel" style="width:auto; padding:9px 16px;">Cancel</button>
+                <button class="danger-btn" id="btn-wipe-execute" disabled style="width:auto; padding:9px 18px; opacity:0.5; cursor:not-allowed;">
+                    <i data-lucide="trash-2" class="lucide-icon" style="width:14px;height:14px;"></i> I understand the consequences, delete this data
+                </button>
+            </div>
+        </div>
     </div>
 
     <script src="assets/js/app.js"></script>

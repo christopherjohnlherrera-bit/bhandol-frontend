@@ -3107,13 +3107,41 @@ function loadRecentStockOut() {
 // =============================================
 let currentTxnPage = 1;
 
+// Helper: Check if a transaction occurred in the current calendar month
+function isCurrentMonthTxn(t) {
+  if (!t || !t.date) return false;
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  if (typeof t.date === 'string') {
+    if (t.date.includes('/')) {
+      const parts = t.date.split('/');
+      if (parts.length === 3) {
+        return parseInt(parts[1], 10) === currentMonth && parseInt(parts[2], 10) === currentYear;
+      }
+    }
+    if (t.date.includes('-')) {
+      const parts = t.date.split('-');
+      if (parts.length === 3) {
+        return parseInt(parts[1], 10) === currentMonth && parseInt(parts[0], 10) === currentYear;
+      }
+    }
+  }
+  const d = new Date(t.date);
+  return !isNaN(d.getTime()) && (d.getMonth() + 1 === currentMonth) && (d.getFullYear() === currentYear);
+}
+
 function loadTransactions() {
   const txns = getTransactions();
-  const stockIn = txns.filter(t => t.type === "Stock In").length;
-  const stockOut = txns.filter(t => t.type === "Stock Out").length;
+  const thisMonthTxns = txns.filter(isCurrentMonthTxn);
+  const stockIn = thisMonthTxns.filter(t => t.type === "Stock In").length;
+  const stockOut = thisMonthTxns.filter(t => t.type === "Stock Out").length;
+  const net = stockIn - stockOut;
+
   setText("txn-stock-in", stockIn);
   setText("txn-stock-out", stockOut);
-  setText("txn-net", stockIn - stockOut);
+  setText("txn-net", net >= 0 ? `+${net}` : net);
 
   const products = getProducts();
   const catFilter = document.getElementById("txn-category");
@@ -3614,7 +3642,10 @@ function _buildHighlightWidget(title, icon, items, accentCss) {
     </div>`;
 }
 
-function _buildReportTable(headers, rows, emptyMsg) {
+let _reportTablePages = {};
+let _activeReportType = null;
+
+function _buildReportTable(headers, rows, emptyMsg, tableKey = 'default') {
   if (rows.length === 0) {
     return `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 0;color:var(--slate-400);">
@@ -3623,21 +3654,57 @@ function _buildReportTable(headers, rows, emptyMsg) {
         <p style="margin:0;font-size:13px;">Adjust the date filter or check back when records are available.</p>
       </div>`;
   }
+
+  const pageSize = 10;
+  if (!_reportTablePages[tableKey]) _reportTablePages[tableKey] = 1;
+  let page = _reportTablePages[tableKey];
+  const totalPages = Math.ceil(rows.length / pageSize) || 1;
+  if (page > totalPages) page = totalPages;
+  if (page < 1) page = 1;
+  _reportTablePages[tableKey] = page;
+
+  const startIdx = (page - 1) * pageSize;
+  const pageRows = rows.slice(startIdx, startIdx + pageSize);
+
+  const prevDisabled = page <= 1 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '';
+  const nextDisabled = page >= totalPages ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : '';
+
   return `
-    <div style="overflow:auto;border-radius:var(--radius-md);border:1px solid var(--surface-border);">
-      <table style="width:100%;border-collapse:collapse;text-align:left;">
-        <thead style="background:var(--surface-alt);position:sticky;top:0;z-index:5;border-bottom:1px solid var(--surface-border);">
-          <tr>${headers.map(h => `<th style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);white-space:nowrap;">${h}</th>`).join('')}</tr>
-        </thead>
-        <tbody>
-          ${rows.map((cells, ri) => `
-            <tr style="border-bottom:1px solid var(--surface-border);${ri % 2 === 1 ? 'background:var(--surface-strong);' : ''}">
-              ${cells.map(c => `<td style="padding:9px 16px;font-size:13px;">${c}</td>`).join('')}
-            </tr>`).join('')}
-        </tbody>
-      </table>
+    <div id="${tableKey}-container">
+      <div style="overflow:auto;border-radius:var(--radius-md);border:1px solid var(--surface-border);margin-bottom:12px;">
+        <table style="width:100%;border-collapse:collapse;text-align:left;">
+          <thead style="background:var(--surface-alt);position:sticky;top:0;z-index:5;border-bottom:1px solid var(--surface-border);">
+            <tr>${headers.map(h => `<th style="padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate-500);white-space:nowrap;">${h}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${pageRows.map((cells, ri) => `
+              <tr style="border-bottom:1px solid var(--surface-border);${ri % 2 === 1 ? 'background:var(--surface-strong);' : ''}">
+                ${cells.map(c => `<td style="padding:9px 16px;font-size:13px;">${c}</td>`).join('')}
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 2px;font-size:12px;color:var(--slate-500);">
+        <span>Page <strong>${page}</strong> of <strong>${totalPages}</strong> (${rows.length} total entries)</span>
+        <div style="display:flex;gap:8px;">
+          <button class="secondary-btn" style="padding:5px 12px;font-size:12px;" ${prevDisabled} onclick="window.changeReportModalPage('${tableKey}', -1)">
+            &larr; Previous
+          </button>
+          <button class="secondary-btn" style="padding:5px 12px;font-size:12px;" ${nextDisabled} onclick="window.changeReportModalPage('${tableKey}', 1)">
+            Next &rarr;
+          </button>
+        </div>
+      </div>
     </div>`;
 }
+
+window.changeReportModalPage = function(tableKey, delta) {
+  if (!_reportTablePages[tableKey]) _reportTablePages[tableKey] = 1;
+  _reportTablePages[tableKey] += delta;
+  if (_activeReportType) {
+    window.openTxnReportModal(_activeReportType, false);
+  }
+};
 
 // --- Individual report renderers ---
 
@@ -3674,7 +3741,8 @@ function _renderStockInReport(txns, bodyEl) {
       ${_buildReportTable(
         ['Date', 'Time', 'Product', 'Category', 'Qty Added', 'Unit', 'User'],
         tableRows,
-        'No Stock In data recorded for this period'
+        'No Stock In data recorded for this period',
+        'stock-in-report-table'
       )}
     </div>`;
 }
@@ -3712,7 +3780,8 @@ function _renderStockOutReport(txns, bodyEl) {
       ${_buildReportTable(
         ['Date', 'Time', 'Product', 'Category', 'Qty Deducted', 'Unit', 'User'],
         tableRows,
-        'No Stock Out data recorded for this period'
+        'No Stock Out data recorded for this period',
+        'stock-out-report-table'
       )}
     </div>`;
 }
@@ -3795,7 +3864,8 @@ function _renderNetMovementReport(txns, bodyEl) {
       ${_buildReportTable(
         ['Category', 'Total In', 'Total Out', 'Net Movement'],
         tableRows,
-        'No category data available'
+        'No category data available',
+        'net-move-report-table'
       )}
     </div>`;
 
@@ -3876,11 +3946,18 @@ function _renderNetMovementReport(txns, bodyEl) {
 
 // --- Public API ---
 
-window.openTxnReportModal = function (type) {
+window.openTxnReportModal = function (type, resetPage = true) {
   const modal = document.getElementById('txn-report-modal');
   const titleEl = document.getElementById('txn-report-title');
   const bodyEl = document.getElementById('txn-report-body');
   if (!modal || !titleEl || !bodyEl) return;
+
+  _activeReportType = type;
+  if (resetPage) {
+    _reportTablePages['stock-in-report-table'] = 1;
+    _reportTablePages['stock-out-report-table'] = 1;
+    _reportTablePages['net-move-report-table'] = 1;
+  }
 
   // Tear down any stale chart before rebuilding
   if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
@@ -3915,6 +3992,7 @@ window.closeTxnReportModal = function () {
   const modal = document.getElementById('txn-report-modal');
   if (modal) modal.style.display = 'none';
   if (_txnNetChartInstance) { _txnNetChartInstance.destroy(); _txnNetChartInstance = null; }
+  _activeReportType = null;
 };
 
 // =============================================
@@ -5194,6 +5272,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   setActiveNav();
   renderBranchContext();
+  updateSidebarNotificationBadges();
 
   if (userRole && !sessionStorage.getItem("welcomeShown")) {
     showWelcomeModal(displayName, userRole);
@@ -5221,6 +5300,37 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (page === "threshold.html") setupThreshold();
   if (page === "settings.html") setupSettings();
 });
+
+// =============================================
+//  SIDEBAR ACTIVITY NOTIFICATION BADGES
+// =============================================
+window.updateSidebarNotificationBadges = async function () {
+  try {
+    const res = await fetch(`${API_URL}/threshold/requests`);
+    if (!res || !res.ok) return;
+    const all = await res.json();
+    if (!Array.isArray(all)) return;
+    const pendingCount = all.filter(r => r.status === 'PENDING').length;
+
+    const thresholdLinks = document.querySelectorAll('aside.sidebar nav a[href*="threshold"]');
+    thresholdLinks.forEach(link => {
+      let badge = link.querySelector('.sidebar-badge');
+      if (pendingCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'sidebar-badge danger';
+          link.appendChild(badge);
+        }
+        badge.textContent = `! (${pendingCount})`;
+        badge.title = `${pendingCount} pending threshold expansion request(s)`;
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+  } catch (err) {
+    // Fail silently
+  }
+};
 
 // =============================================
 //  SETTINGS PAGE
@@ -5359,6 +5469,103 @@ function setupSettings() {
     });
   }
 
+  // ── Danger Zone: Clear Data / System Wipe ──────────────────────────────────
+  const wipeScopeSelect    = document.getElementById('wipe-scope-select');
+  const wipeAdvisoryText   = document.getElementById('wipe-advisory-text');
+  const btnOpenWipeModal   = document.getElementById('btn-open-wipe-modal');
+  const wipeModal          = document.getElementById('wipe-confirm-modal');
+  const wipeTargetName     = document.getElementById('wipe-target-name');
+  const wipeRequiredPhrase = document.getElementById('wipe-required-phrase');
+  const wipeConfirmInput   = document.getElementById('wipe-confirm-input');
+  const btnWipeCancel      = document.getElementById('btn-wipe-cancel');
+  const btnWipeExecute     = document.getElementById('btn-wipe-execute');
+
+  function getRequiredPhrase(scope) {
+    if (scope === 'Consolidated') return 'delete all data for Consolidated';
+    return `delete all data for ${scope} Branch`;
+  }
+
+  function updateWipeAdvisory() {
+    const scope = wipeScopeSelect ? wipeScopeSelect.value : 'Consolidated';
+    if (wipeAdvisoryText) {
+      if (scope === 'Consolidated') {
+        wipeAdvisoryText.innerHTML = '<strong>High Risk System-Wide Wipe:</strong> Wiping Consolidated data will permanently erase all products, transactions, and request history across ALL branches. Admin credentials remain protected.';
+      } else {
+        wipeAdvisoryText.innerHTML = `<strong>High Risk Branch Wipe:</strong> Wiping ${scope} Branch will erase all inventory, transactions, and request records for ${scope} only. Other branches remain intact.`;
+      }
+    }
+  }
+
+  if (wipeScopeSelect) {
+    wipeScopeSelect.addEventListener('change', updateWipeAdvisory);
+    updateWipeAdvisory();
+  }
+
+  if (btnOpenWipeModal && wipeModal) {
+    btnOpenWipeModal.addEventListener('click', () => {
+      const scope = wipeScopeSelect ? wipeScopeSelect.value : 'Consolidated';
+      const phrase = getRequiredPhrase(scope);
+      if (wipeTargetName) wipeTargetName.textContent = scope === 'Consolidated' ? 'Consolidated (All Branches)' : `${scope} Branch`;
+      if (wipeRequiredPhrase) wipeRequiredPhrase.textContent = phrase;
+      if (wipeConfirmInput) {
+        wipeConfirmInput.value = '';
+        wipeConfirmInput.placeholder = `Type "${phrase}"`;
+      }
+      if (btnWipeExecute) {
+        btnWipeExecute.disabled = true;
+        btnWipeExecute.style.opacity = '0.5';
+        btnWipeExecute.style.cursor = 'not-allowed';
+      }
+      wipeModal.style.display = 'flex';
+      if (window.lucide) window.lucide.createIcons({ root: wipeModal });
+      if (wipeConfirmInput) setTimeout(() => wipeConfirmInput.focus(), 100);
+    });
+  }
+
+  if (wipeConfirmInput && btnWipeExecute) {
+    wipeConfirmInput.addEventListener('input', () => {
+      const scope = wipeScopeSelect ? wipeScopeSelect.value : 'Consolidated';
+      const required = getRequiredPhrase(scope).trim();
+      const entered = wipeConfirmInput.value.trim();
+      const isMatch = entered.toLowerCase() === required.toLowerCase();
+      btnWipeExecute.disabled = !isMatch;
+      btnWipeExecute.style.opacity = isMatch ? '1' : '0.5';
+      btnWipeExecute.style.cursor = isMatch ? 'pointer' : 'not-allowed';
+    });
+  }
+
+  if (btnWipeCancel && wipeModal) {
+    btnWipeCancel.addEventListener('click', () => {
+      wipeModal.style.display = 'none';
+      if (wipeConfirmInput) wipeConfirmInput.value = '';
+    });
+  }
+
+  if (btnWipeExecute && wipeModal) {
+    btnWipeExecute.addEventListener('click', async () => {
+      const scope = wipeScopeSelect ? wipeScopeSelect.value : 'Consolidated';
+      btnWipeExecute.disabled = true;
+      btnWipeExecute.innerHTML = '<i data-lucide="loader" class="lucide-icon spin"></i> Wiping Data...';
+      if (window.lucide) window.lucide.createIcons({ root: btnWipeExecute });
+
+      try {
+        const res = await fetch(`${API_URL}/system/clear-data?scope=${encodeURIComponent(scope)}`, {
+          method: 'DELETE'
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed to clear data');
+
+        wipeModal.style.display = 'none';
+        showToast('success', 'Data Wipe Complete', result.message || 'Data cleared successfully. Reloading workspace...', 3500);
+        setTimeout(() => window.location.reload(), 2000);
+      } catch (err) {
+        showToast('error', 'Wipe Failed', err.message || 'Could not perform system wipe.');
+        btnWipeExecute.disabled = false;
+        btnWipeExecute.innerHTML = '<i data-lucide="trash-2" class="lucide-icon"></i> I understand the consequences, delete this data';
+        if (window.lucide) window.lucide.createIcons({ root: btnWipeExecute });
+      }
+    });
+  }
 
   // ── Sidebar Logout Button (sidebar-footer pattern) ──────────────────────────
   const btnLogout = document.getElementById('btn-logout');
