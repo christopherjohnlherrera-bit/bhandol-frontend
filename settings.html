@@ -112,20 +112,17 @@
 
                 <!-- CARD 1: APPEARANCE & DISPLAY SETTINGS -->
                 <div class="card" style="margin-bottom: 24px;">
-                    <h2 style="margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                    <h2 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
                         <i data-lucide="palette" class="lucide-icon"></i> Appearance & Display
                     </h2>
-                    <p style="font-size: 13.5px; color: var(--slate-500); margin-bottom: 20px;">
-                        Customize your workspace appearance and interface theme.
-                    </p>
 
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface-alt); border: 1px solid var(--surface-border); border-radius: var(--radius-sm);">
                         <div>
                             <div style="font-weight: 600; font-size: 14px; color: var(--slate-800); margin-bottom: 4px;">Dark Mode Theme</div>
                             <div style="font-size: 13px; color: var(--slate-500);">Switch between standard light interface and high-contrast dark palette.</div>
                         </div>
-                        <div class="theme-toggle" id="settings-theme-toggle" style="cursor: pointer; margin: 0; background: var(--surface); border: 1px solid var(--surface-border-strong); padding: 8px 14px; border-radius: 20px; display: inline-flex; align-items: center; gap: 10px;">
-                            <span class="theme-toggle-label" style="font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                        <div class="theme-toggle" id="settings-theme-toggle" style="cursor: pointer; margin: 0; padding: 8px 16px; border-radius: 24px; display: inline-flex; align-items: center; gap: 12px;">
+                            <span class="theme-toggle-label" style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px;">
                                 <i data-lucide="moon" class="lucide-icon" style="width:15px;height:15px;"></i>
                                 <span id="settings-theme-status">Dark Mode</span>
                             </span>
@@ -182,25 +179,7 @@
                     </div>
                 </div>
 
-                <!-- CARD 3: GOVERNANCE & UTILITIES SHORTCUT -->
-                <div class="card" style="border-left: 4px solid var(--blue-500); margin-bottom: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-                        <div>
-                            <h3 style="margin: 0 0 4px 0; font-size: 15px; color: var(--slate-800);">
-                                <i data-lucide="sliders" class="lucide-icon" style="width: 16px; height: 16px; margin-right: 6px;"></i>
-                                Stock Thresholds & Governance Controls
-                            </h3>
-                            <p style="margin: 0; font-size: 13px; color: var(--slate-500);">
-                                Per-product Min/Max capacity boundaries, custom alert thresholds, and limit expansion reviews are managed in the Thresholds module.
-                            </p>
-                        </div>
-                        <a href="threshold.html" class="primary-btn" style="width: auto; text-decoration: none; padding: 8px 16px; font-size: 13px;">
-                            Open Threshold Governance <i data-lucide="arrow-right" class="lucide-icon" style="width: 14px; height: 14px; margin-left: 4px;"></i>
-                        </a>
-                    </div>
-                </div>
-
-                <!-- CARD 4: DANGER ZONE - DATA WIPE & SYSTEM RESET -->
+                <!-- CARD 3: DANGER ZONE - DATA WIPE & SYSTEM RESET -->
                 <div class="card admin-only" id="danger-zone-card" style="border-left: 4px solid var(--red-500); margin-bottom: 24px;">
                     <h2 style="margin-bottom: 4px; display: flex; align-items: center; gap: 8px; color: var(--red-600);">
                         <i data-lucide="alert-octagon" class="lucide-icon"></i> Danger Zone: Clear Data / System Wipe

@@ -5169,16 +5169,24 @@ window.closeWidgetFullscreen = function () {
 //  SIDEBAR REAL-TIME CLOCK
 // =============================================
 function initSidebarClock() {
-  const themeToggle = document.getElementById("theme-toggle");
-  if (!themeToggle) return;
+  const userBox = document.querySelector("aside.sidebar .user-box") || document.querySelector(".user-box");
+  const sidebar = document.querySelector("aside.sidebar");
+  if (!sidebar) return;
 
-  const clockDiv = document.createElement("div");
-  clockDiv.className = "sidebar-clock";
-  clockDiv.id = "sidebar-clock";
-  clockDiv.innerHTML = `<i data-lucide="clock" class="lucide-icon" style="width:14px;height:14px;"></i> <span id="clock-time">--:--:-- --</span>`;
-  
-  themeToggle.parentNode.insertBefore(clockDiv, themeToggle);
-  if (window.lucide) window.lucide.createIcons({ root: clockDiv });
+  let clockDiv = document.getElementById("sidebar-clock");
+  if (!clockDiv) {
+    clockDiv = document.createElement("div");
+    clockDiv.className = "sidebar-clock";
+    clockDiv.id = "sidebar-clock";
+    clockDiv.innerHTML = `<i data-lucide="clock" class="lucide-icon" style="width:14px;height:14px;"></i> <span id="clock-time">--:--:-- --</span>`;
+    
+    if (userBox && userBox.parentNode) {
+      userBox.parentNode.insertBefore(clockDiv, userBox);
+    } else {
+      sidebar.appendChild(clockDiv);
+    }
+    if (window.lucide) window.lucide.createIcons({ root: clockDiv });
+  }
 
   function updateClock() {
     const timeSpan = document.getElementById("clock-time");
@@ -5195,7 +5203,9 @@ function initSidebarClock() {
   }
 
   updateClock();
-  setInterval(updateClock, 1000);
+  if (!window._sidebarClockTimer) {
+    window._sidebarClockTimer = setInterval(updateClock, 1000);
+  }
 }
 
 // =============================================
